@@ -500,7 +500,7 @@ where
                         continue;
                     }
 
-                    let new_cost = if from_route_idx == to_route_idx {
+                    if from_route_idx == to_route_idx {
                         // Same route: just the new cost
                         let (windows, cost) = from_schedule.unwrap();
                         let other_cost: i32 = routes
@@ -560,7 +560,7 @@ where
                             routes[to_route_idx].total_travel_time = to_cost;
                             return true;
                         }
-                    };
+                    }
                 }
             }
         }

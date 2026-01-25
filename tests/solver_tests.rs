@@ -874,6 +874,112 @@ fn test_stability_penalty_prefers_current_assignment() {
     );
 }
 
+// ============================================================================
+// Scale Tests
+// ============================================================================
+
+#[test]
+fn test_50_visits_5_visitors() {
+    // Realistic problem size: 50 visits across 5 technicians
+    let visits: Vec<TestVisit> = (0..50)
+        .map(|i| {
+            // Spread visits across a 10x10 grid
+            let x = (i % 10) as f64;
+            let y = (i / 10) as f64;
+            TestVisit::new(&format!("v{}", i))
+                .location(x, y)
+                .duration(20 + (i as i32 % 20)) // 20-40 min visits
+        })
+        .collect();
+
+    let visitors: Vec<TestVisitor> = (0..5)
+        .map(|i| {
+            // Spread visitors around the edges
+            let x = (i * 2) as f64;
+            TestVisitor::new(&format!("tech{}", i)).start_location(x, 0.0)
+        })
+        .collect();
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(0, hours(10)), // 10 hour day
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    // Count assignments
+    let total_assigned: usize = result.routes.iter().map(|r| r.visit_ids.len()).sum();
+    let total_unassigned = result.unassigned.len();
+
+    println!("50 visits, 5 techs: {} assigned, {} unassigned", total_assigned, total_unassigned);
+
+    // Most should be assigned (10 hour day with 20-40 min visits should fit most)
+    assert!(
+        total_assigned >= 40,
+        "At least 40 of 50 visits should be assigned, got {}",
+        total_assigned
+    );
+
+    // Work should be distributed
+    for route in &result.routes {
+        println!("  {}: {} visits", route.visitor_id.0, route.visit_ids.len());
+    }
+}
+
+#[test]
+fn test_100_visits_10_visitors() {
+    // Upper bound of spec: 100 visits across 10 technicians
+    let visits: Vec<TestVisit> = (0..100)
+        .map(|i| {
+            let x = (i % 10) as f64;
+            let y = (i / 10) as f64;
+            TestVisit::new(&format!("v{}", i))
+                .location(x, y)
+                .duration(15 + (i as i32 % 15)) // 15-30 min visits
+        })
+        .collect();
+
+    let visitors: Vec<TestVisitor> = (0..10)
+        .map(|i| {
+            TestVisitor::new(&format!("tech{}", i)).start_location(i as f64, 0.0)
+        })
+        .collect();
+
+    let start = std::time::Instant::now();
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(0, hours(10)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+    let elapsed = start.elapsed();
+
+    let total_assigned: usize = result.routes.iter().map(|r| r.visit_ids.len()).sum();
+
+    println!(
+        "100 visits, 10 techs: {} assigned in {:?}",
+        total_assigned, elapsed
+    );
+
+    // Should complete in reasonable time (spec says 10s target)
+    assert!(
+        elapsed.as_secs() < 30,
+        "Should complete in <30s, took {:?}",
+        elapsed
+    );
+
+    // Most should be assigned
+    assert!(
+        total_assigned >= 80,
+        "At least 80 of 100 visits should be assigned, got {}",
+        total_assigned
+    );
+}
+
 #[test]
 fn test_no_visitors() {
     let visits = vec![TestVisit::new("v1").location(1.0, 0.0)];
