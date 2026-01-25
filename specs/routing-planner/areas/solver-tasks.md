@@ -8,9 +8,9 @@
 - [x] Implement 2-opt operator (segment reversal).
 - [x] Implement relocate operator (inter/intra-route moves).
 
-## In Progress
+## Done (continued)
 
-- [ ] Add stability penalty to cost function (use `current_visitor_id()` from Visit trait).
+- [x] Add stability penalty to cost function (uses `current_visitor_id()` from Visit trait).
 
 ## Future (v2)
 

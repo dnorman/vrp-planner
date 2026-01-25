@@ -30,7 +30,7 @@
 - [x] Cheapest insertion construction.
 - [x] 2-opt operator (local search).
 - [x] Relocate operator (local search).
-- [ ] Stability penalty in cost function.
+- [x] Stability penalty in cost function.
 - [ ] RoutePlan creation flow (lazy creation on optimization runs).
 - [ ] Assignment + sequencing persistence.
 - [ ] RouteOptimizationRun metrics and error handling.

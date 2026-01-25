@@ -111,7 +111,7 @@ where
         };
 
         if !route.visits.is_empty() {
-            if let Some(schedule) = compute_schedule(service_date, &route, availability, &matrix, &index, options.target_time_weight) {
+            if let Some(schedule) = compute_schedule(service_date, &route, availability, &matrix, &index, &options) {
                 route.estimated_windows = schedule.0;
                 route.total_travel_time = schedule.1;
             } else {
@@ -153,7 +153,7 @@ where
                     availability,
                     &matrix,
                     &index,
-                    options.target_time_weight,
+                    &options,
                 ) {
                     if schedule.1 < best_cost {
                         best_cost = schedule.1;
@@ -229,7 +229,7 @@ fn compute_schedule<V, R, A>(
     availability: &A,
     matrix: &[Vec<i32>],
     index: &HashMap<String, usize>,
-    target_weight: i32,
+    options: &SolveOptions,
 ) -> Option<(Vec<(i32, i32)>, i32)>
 where
     V: Visit,
@@ -238,7 +238,7 @@ where
 {
     let availability_window = availability.availability_for(route.visitor.id(), service_date)?;
     let mut time = availability_window.0;
-    let mut total_travel = 0;
+    let mut total_cost = 0;
     let mut windows = Vec::with_capacity(route.visits.len());
 
     let mut prev_location = route
@@ -249,7 +249,7 @@ where
     for visit in &route.visits {
         let travel = travel_time(prev_location, visit.location(), matrix, index);
         time += travel;
-        total_travel += travel;
+        total_cost += travel;
 
         if let Some((window_start, window_end)) = visit.committed_window() {
             if time < window_start {
@@ -268,15 +268,23 @@ where
             return None;
         }
 
+        // Target time penalty
         if let Some(target) = visit.target_time() {
-            total_travel += (start_time - target).abs() * target_weight;
+            total_cost += (start_time - target).abs() * options.target_time_weight;
+        }
+
+        // Stability penalty: penalize reassigning to a different visitor
+        if let Some(current_visitor) = visit.current_visitor_id() {
+            if current_visitor != route.visitor.id() {
+                total_cost += options.reassignment_penalty;
+            }
         }
 
         windows.push((start_time, start_time + duration_secs));
         prev_location = visit.location();
     }
 
-    Some((windows, total_travel))
+    Some((windows, total_cost))
 }
 
 fn travel_time(
@@ -349,7 +357,7 @@ fn two_opt_improve<'a, V, R, A>(
     availability: &A,
     matrix: &[Vec<i32>],
     index: &HashMap<String, usize>,
-    target_weight: i32,
+    options: &SolveOptions,
 ) -> bool
 where
     V: Visit,
@@ -382,7 +390,7 @@ where
                 availability,
                 matrix,
                 index,
-                target_weight,
+                options,
             ) {
                 if cost < current_cost {
                     route.visits[i + 1..=j].reverse();
@@ -405,7 +413,7 @@ fn relocate_improve<'a, V, R, A>(
     availability: &A,
     matrix: &[Vec<i32>],
     index: &HashMap<String, usize>,
-    target_weight: i32,
+    options: &SolveOptions,
 ) -> bool
 where
     V: Visit,
@@ -485,7 +493,7 @@ where
                         availability,
                         matrix,
                         index,
-                        target_weight,
+                        options,
                     );
 
                     if from_schedule.is_none() {
@@ -524,7 +532,7 @@ where
                             availability,
                             matrix,
                             index,
-                            target_weight,
+                            options,
                         );
 
                         if to_schedule.is_none() {
@@ -586,7 +594,7 @@ where
                 availability,
                 matrix,
                 index,
-                options.target_time_weight,
+                options,
             ) {
                 improved = true;
             }
@@ -599,7 +607,7 @@ where
             availability,
             matrix,
             index,
-            options.target_time_weight,
+            options,
         ) {
             improved = true;
         }

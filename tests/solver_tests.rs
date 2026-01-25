@@ -804,6 +804,77 @@ fn test_relocate_balances_routes() {
 }
 
 #[test]
+fn test_stability_penalty_prefers_current_assignment() {
+    // Create two visits, each currently assigned to a different visitor.
+    // Even though switching them might save travel time, the stability
+    // penalty should discourage it.
+
+    // v1 is near bob but currently assigned to alice
+    // v2 is near alice but currently assigned to bob
+    // Without stability, solver might swap them. With stability, it should keep them.
+
+    let visits = vec![
+        TestVisit::new("v1")
+            .location(9.0, 0.0) // Near bob's start (10, 0)
+            .duration(30)
+            .currently_assigned_to("alice"),
+        TestVisit::new("v2")
+            .location(1.0, 0.0) // Near alice's start (0, 0)
+            .duration(30)
+            .currently_assigned_to("bob"),
+    ];
+    let visitors = vec![
+        TestVisitor::new("alice").start_location(0.0, 0.0),
+        TestVisitor::new("bob").start_location(10.0, 0.0),
+    ];
+
+    // With high stability penalty, should keep current assignments
+    let result_stable = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(0, hours(8)),
+        &ManhattanMatrix,
+        SolveOptions {
+            reassignment_penalty: 1000, // High penalty
+            ..Default::default()
+        },
+    );
+
+    // With no stability penalty, should swap to minimize travel
+    let result_no_stability = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(0, hours(8)),
+        &ManhattanMatrix,
+        SolveOptions {
+            reassignment_penalty: 0, // No penalty
+            ..Default::default()
+        },
+    );
+
+    let stable_alice = get_visitor_visits(&result_stable, "alice");
+    let stable_bob = get_visitor_visits(&result_stable, "bob");
+    let no_stab_alice = get_visitor_visits(&result_no_stability, "alice");
+    let no_stab_bob = get_visitor_visits(&result_no_stability, "bob");
+
+    // With stability, v1 should stay with alice (its current assignment)
+    assert!(
+        stable_alice.contains(&"v1"),
+        "With stability, v1 should stay with alice: alice={:?}, bob={:?}",
+        stable_alice, stable_bob
+    );
+
+    // Without stability, v1 should move to bob (closer)
+    assert!(
+        no_stab_bob.contains(&"v1"),
+        "Without stability, v1 should move to bob: alice={:?}, bob={:?}",
+        no_stab_alice, no_stab_bob
+    );
+}
+
+#[test]
 fn test_no_visitors() {
     let visits = vec![TestVisit::new("v1").location(1.0, 0.0)];
     let visitors: Vec<TestVisitor> = vec![];
