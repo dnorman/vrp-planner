@@ -134,8 +134,19 @@ where
         let mut best_position: usize = 0;
         let mut best_cost: i32 = i32::MAX;
         let mut best_schedule: Option<(Vec<(i32, i32)>, i32)> = None;
+        let mut found_capable_available_visitor = false;
 
         for (route_index, route) in routes.iter().enumerate() {
+            // Skip visitors who don't have required capabilities
+            if !visitor_can_do(visit, route.visitor) {
+                continue;
+            }
+
+            // Check if this capable visitor is available
+            if availability.availability_for(route.visitor.id(), service_date).is_some() {
+                found_capable_available_visitor = true;
+            }
+
             for position in 0..=route.visits.len() {
                 let mut candidate = route.visits.clone();
                 candidate.insert(position, visit);
@@ -173,7 +184,13 @@ where
                 route.total_travel_time = cost;
             }
         } else {
-            unassigned_with_reason.push((visit, UnassignedReason::NoFeasibleWindow));
+            // Determine the reason: no capable available visitor, or no feasible window
+            let reason = if found_capable_available_visitor {
+                UnassignedReason::NoFeasibleWindow
+            } else {
+                UnassignedReason::NoCapableVisitor
+            };
+            unassigned_with_reason.push((visit, reason));
         }
     }
 
@@ -208,19 +225,27 @@ where
     PlannerResult { routes, unassigned }
 }
 
+/// Check if a visitor has all required capabilities for a visit.
+fn visitor_can_do<V, R>(visit: &V, visitor: &R) -> bool
+where
+    V: Visit,
+    R: Visitor<Id = V::VisitorId>,
+{
+    let required = visit.required_capabilities();
+    if required.is_empty() {
+        return true;
+    }
+    let available = visitor.capabilities();
+    required.iter().all(|cap| available.contains(cap))
+}
+
+/// Check if any visitor in the list can handle this visit.
 fn visit_is_compatible<V, R>(visit: &V, visitors: &[R]) -> bool
 where
     V: Visit,
     R: Visitor<Id = V::VisitorId>,
 {
-    visitors.iter().any(|visitor| {
-        let required = visit.required_capabilities();
-        if required.is_empty() {
-            return true;
-        }
-        let available = visitor.capabilities();
-        required.iter().all(|cap| available.contains(cap))
-    })
+    visitors.iter().any(|visitor| visitor_can_do(visit, visitor))
 }
 
 fn compute_schedule<V, R, A>(

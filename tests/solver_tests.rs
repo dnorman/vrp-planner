@@ -874,6 +874,456 @@ fn test_stability_penalty_prefers_current_assignment() {
     );
 }
 
+#[test]
+fn test_reassignment_when_visitor_calls_in_sick() {
+    // Scenario: Alice had 3 visits assigned yesterday, but calls in sick today.
+    // Those visits should be reassigned to Bob (the only available visitor).
+    // Even with stability penalty, reassignment must happen since Alice is unavailable.
+
+    let visits = vec![
+        TestVisit::new("v1")
+            .location(1.0, 0.0)
+            .duration(30)
+            .currently_assigned_to("alice"),
+        TestVisit::new("v2")
+            .location(2.0, 0.0)
+            .duration(30)
+            .currently_assigned_to("alice"),
+        TestVisit::new("v3")
+            .location(3.0, 0.0)
+            .duration(30)
+            .currently_assigned_to("alice"),
+    ];
+    let visitors = vec![
+        TestVisitor::new("alice").start_location(0.0, 0.0),
+        TestVisitor::new("bob").start_location(0.0, 0.0),
+    ];
+
+    // Alice is unavailable (sick) - visits should go to Bob
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new()
+            .visitor_unavailable("alice")
+            .default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions {
+            reassignment_penalty: 1000, // High penalty, but shouldn't matter
+            ..Default::default()
+        },
+    );
+
+    // All visits should be reassigned to Bob
+    let bob_visits = get_visitor_visits(&result, "bob");
+    assert_eq!(
+        bob_visits.len(),
+        3,
+        "All 3 visits should be reassigned to Bob: {:?}",
+        bob_visits
+    );
+    assert!(result.unassigned.is_empty(), "No visits should be unassigned");
+}
+
+#[test]
+fn test_partial_reassignment_multiple_visitors_sick() {
+    // Scenario: Alice and Bob each had visits, but Alice calls in sick.
+    // Alice's visits should move to Bob. Bob's visits stay with Bob.
+
+    let visits = vec![
+        // Alice's visits (need reassignment)
+        TestVisit::new("a1")
+            .location(1.0, 0.0)
+            .duration(30)
+            .currently_assigned_to("alice"),
+        TestVisit::new("a2")
+            .location(2.0, 0.0)
+            .duration(30)
+            .currently_assigned_to("alice"),
+        // Bob's visits (should stay)
+        TestVisit::new("b1")
+            .location(1.0, 1.0)
+            .duration(30)
+            .currently_assigned_to("bob"),
+        TestVisit::new("b2")
+            .location(2.0, 1.0)
+            .duration(30)
+            .currently_assigned_to("bob"),
+    ];
+    let visitors = vec![
+        TestVisitor::new("alice").start_location(0.0, 0.0),
+        TestVisitor::new("bob").start_location(0.0, 1.0),
+    ];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new()
+            .visitor_unavailable("alice")
+            .default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions {
+            reassignment_penalty: 1000,
+            ..Default::default()
+        },
+    );
+
+    let bob_visits = get_visitor_visits(&result, "bob");
+
+    // Bob should have all 4 visits
+    assert_eq!(
+        bob_visits.len(),
+        4,
+        "Bob should have all 4 visits (2 original + 2 from Alice): {:?}",
+        bob_visits
+    );
+
+    // Verify Alice's visits were reassigned
+    assert!(bob_visits.contains(&"a1"), "a1 should be reassigned to Bob");
+    assert!(bob_visits.contains(&"a2"), "a2 should be reassigned to Bob");
+
+    // Verify Bob's visits stayed
+    assert!(bob_visits.contains(&"b1"), "b1 should stay with Bob");
+    assert!(bob_visits.contains(&"b2"), "b2 should stay with Bob");
+}
+
+#[test]
+fn test_reassignment_respects_capabilities() {
+    // Scenario: Alice (plumber) calls in sick. Her plumbing visits can only
+    // go to Charlie (also a plumber), not Bob (electrician).
+
+    let visits = vec![
+        TestVisit::new("plumb1")
+            .location(1.0, 0.0)
+            .duration(30)
+            .requires("plumbing")
+            .currently_assigned_to("alice"),
+        TestVisit::new("plumb2")
+            .location(2.0, 0.0)
+            .duration(30)
+            .requires("plumbing")
+            .currently_assigned_to("alice"),
+    ];
+    let visitors = vec![
+        TestVisitor::new("alice")
+            .start_location(0.0, 0.0)
+            .capability("plumbing"),
+        TestVisitor::new("bob")
+            .start_location(0.0, 0.0)
+            .capability("electrical"), // Can't do plumbing
+        TestVisitor::new("charlie")
+            .start_location(5.0, 0.0)
+            .capability("plumbing"), // Can do plumbing
+    ];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new()
+            .visitor_unavailable("alice")
+            .default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    // Visits should go to Charlie (only capable visitor available)
+    let charlie_visits = get_visitor_visits(&result, "charlie");
+    let bob_visits = get_visitor_visits(&result, "bob");
+
+    assert_eq!(
+        charlie_visits.len(),
+        2,
+        "Charlie should get both plumbing visits: {:?}",
+        charlie_visits
+    );
+    assert!(
+        bob_visits.is_empty(),
+        "Bob shouldn't get any visits (no plumbing capability): {:?}",
+        bob_visits
+    );
+}
+
+#[test]
+fn test_reassignment_when_no_capable_backup() {
+    // Scenario: Alice (only plumber) calls in sick. Her plumbing visits
+    // cannot be reassigned because no other plumber is available.
+
+    let visits = vec![
+        TestVisit::new("plumb1")
+            .location(1.0, 0.0)
+            .duration(30)
+            .requires("plumbing")
+            .currently_assigned_to("alice"),
+    ];
+    let visitors = vec![
+        TestVisitor::new("alice")
+            .start_location(0.0, 0.0)
+            .capability("plumbing"),
+        TestVisitor::new("bob")
+            .start_location(0.0, 0.0)
+            .capability("electrical"), // Can't do plumbing
+    ];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new()
+            .visitor_unavailable("alice")
+            .default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    // Visit should be unassigned with NoCapableVisitor reason
+    let no_capable = get_unassigned_with_reason(&result, UnassignedReason::NoCapableVisitor);
+    assert!(
+        no_capable.contains(&"plumb1"),
+        "plumb1 should be unassigned (no capable backup): {:?}",
+        result.unassigned
+    );
+}
+
+// ============================================================================
+// Running Late / Delayed Start Tests
+// ============================================================================
+
+#[test]
+fn test_running_late_visits_rescheduled() {
+    // Scenario: Alice had 3 visits but is running late (starts at 11am instead of 8am).
+    // Her visits can still fit in the shortened window.
+    // The visits should stay with her but be rescheduled to later times.
+
+    let visits = vec![
+        TestVisit::new("v1")
+            .location(1.0, 0.0)
+            .duration(30)
+            .currently_assigned_to("alice"),
+        TestVisit::new("v2")
+            .location(2.0, 0.0)
+            .duration(30)
+            .currently_assigned_to("alice"),
+        TestVisit::new("v3")
+            .location(3.0, 0.0)
+            .duration(30)
+            .currently_assigned_to("alice"),
+    ];
+    let visitors = vec![
+        TestVisitor::new("alice").start_location(0.0, 0.0),
+        TestVisitor::new("bob").start_location(0.0, 0.0),
+    ];
+
+    // Alice starts at 11am instead of 8am (3 hour delay)
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new()
+            .visitor_window("alice", hours(11), hours(17)) // Delayed start
+            .default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions {
+            reassignment_penalty: 1000, // High penalty to prefer keeping with Alice
+            ..Default::default()
+        },
+    );
+
+    // All visits should still be assigned (plenty of time from 11am-5pm for 3x30min)
+    assert!(result.unassigned.is_empty(), "All visits should be assigned");
+
+    // With high stability penalty, visits should stay with Alice
+    let alice_visits = get_visitor_visits(&result, "alice");
+    assert_eq!(
+        alice_visits.len(),
+        3,
+        "All 3 visits should stay with Alice despite late start: {:?}",
+        alice_visits
+    );
+
+    // Verify visits are scheduled after 11am
+    let route = result.routes.iter().find(|r| r.visitor_id.0 == "alice").unwrap();
+    for (i, (start, _end)) in route.estimated_windows.iter().enumerate() {
+        assert!(
+            *start >= hours(11),
+            "Visit {} should start at or after 11am, but starts at {}s",
+            i,
+            start
+        );
+    }
+}
+
+#[test]
+fn test_running_late_some_visits_reassigned() {
+    // Scenario: Alice had 4 visits (2 hours total) but starts late (3pm).
+    // She only has 2 hours left (3pm-5pm), but visits might not all fit
+    // due to committed windows. Some visits must go to Bob.
+
+    let visits = vec![
+        // Early morning visits - committed to 8am-10am window, can't wait until 3pm
+        TestVisit::new("early1")
+            .location(1.0, 0.0)
+            .duration(30)
+            .committed_window(hours(8), hours(10))
+            .currently_assigned_to("alice"),
+        TestVisit::new("early2")
+            .location(2.0, 0.0)
+            .duration(30)
+            .committed_window(hours(8), hours(10))
+            .currently_assigned_to("alice"),
+        // Flexible visits - no committed window
+        TestVisit::new("flex1")
+            .location(3.0, 0.0)
+            .duration(30)
+            .currently_assigned_to("alice"),
+        TestVisit::new("flex2")
+            .location(4.0, 0.0)
+            .duration(30)
+            .currently_assigned_to("alice"),
+    ];
+    let visitors = vec![
+        TestVisitor::new("alice").start_location(0.0, 0.0),
+        TestVisitor::new("bob").start_location(0.0, 0.0),
+    ];
+
+    // Alice is running very late (starts at 3pm)
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new()
+            .visitor_window("alice", hours(15), hours(17)) // 3pm-5pm only
+            .default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions {
+            reassignment_penalty: 100, // Moderate penalty
+            ..Default::default()
+        },
+    );
+
+    let alice_visits = get_visitor_visits(&result, "alice");
+    let bob_visits = get_visitor_visits(&result, "bob");
+
+    // Early visits must go to Bob (committed window 8-10am, Alice not available then)
+    assert!(
+        bob_visits.contains(&"early1"),
+        "early1 should be reassigned to Bob (committed window): bob={:?}",
+        bob_visits
+    );
+    assert!(
+        bob_visits.contains(&"early2"),
+        "early2 should be reassigned to Bob (committed window): bob={:?}",
+        bob_visits
+    );
+
+    // Flexible visits can stay with Alice or go to Bob depending on optimization
+    let total_assigned = alice_visits.len() + bob_visits.len();
+    assert_eq!(total_assigned, 4, "All 4 visits should be assigned");
+}
+
+#[test]
+fn test_running_late_cascading_reassignment() {
+    // Scenario: Alice is running 2 hours late. She has a visit with committed
+    // window 9-10am that must be reassigned. Bob takes it, but now Bob
+    // might have too much work and some of his visits cascade elsewhere.
+
+    let visits = vec![
+        // Alice's visit with tight window (must reassign due to late start)
+        TestVisit::new("urgent")
+            .location(5.0, 0.0)
+            .duration(60)
+            .committed_window(hours(9), hours(10))
+            .currently_assigned_to("alice"),
+        // Bob's existing workload
+        TestVisit::new("bob1")
+            .location(1.0, 0.0)
+            .duration(60)
+            .currently_assigned_to("bob"),
+        TestVisit::new("bob2")
+            .location(2.0, 0.0)
+            .duration(60)
+            .currently_assigned_to("bob"),
+        // Charlie's existing workload
+        TestVisit::new("charlie1")
+            .location(8.0, 0.0)
+            .duration(60)
+            .currently_assigned_to("charlie"),
+    ];
+    let visitors = vec![
+        TestVisitor::new("alice").start_location(0.0, 0.0),
+        TestVisitor::new("bob").start_location(0.0, 0.0),
+        TestVisitor::new("charlie").start_location(10.0, 0.0),
+    ];
+
+    // Alice starts at 11am (too late for 9-10am committed window)
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new()
+            .visitor_window("alice", hours(11), hours(17))
+            .default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    // All visits should be assigned
+    let total_assigned: usize = result.routes.iter().map(|r| r.visit_ids.len()).sum();
+    assert_eq!(
+        total_assigned,
+        4,
+        "All 4 visits should be assigned: unassigned={:?}",
+        result.unassigned
+    );
+
+    // The urgent visit should NOT be with Alice (she can't meet the 9-10am window)
+    let alice_visits = get_visitor_visits(&result, "alice");
+    assert!(
+        !alice_visits.contains(&"urgent"),
+        "urgent visit should not be with Alice (she starts at 11am): alice={:?}",
+        alice_visits
+    );
+}
+
+#[test]
+fn test_running_late_no_one_can_cover() {
+    // Scenario: Alice is late, and her visit has a committed window
+    // that no one else can cover either. Visit should be unassigned.
+
+    let visits = vec![
+        TestVisit::new("impossible")
+            .location(1.0, 0.0)
+            .duration(60)
+            .committed_window(hours(7), hours(8)) // 7am-8am window
+            .currently_assigned_to("alice"),
+    ];
+    let visitors = vec![
+        TestVisitor::new("alice").start_location(0.0, 0.0),
+        TestVisitor::new("bob").start_location(0.0, 0.0),
+    ];
+
+    // Alice starts at 10am, Bob starts at 9am - neither can do 7-8am
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new()
+            .visitor_window("alice", hours(10), hours(17))
+            .visitor_window("bob", hours(9), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    // Visit should be unassigned (no one can meet the 7-8am window)
+    let no_window = get_unassigned_with_reason(&result, UnassignedReason::NoFeasibleWindow);
+    assert!(
+        no_window.contains(&"impossible"),
+        "Visit should be unassigned (7-8am window, no one available): {:?}",
+        result.unassigned
+    );
+}
+
 // ============================================================================
 // Scale Tests
 // ============================================================================
