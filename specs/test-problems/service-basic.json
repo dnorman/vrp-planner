@@ -1,0 +1,204 @@
+{
+  "plan": {
+    "jobs": [
+      {
+        "id": "visit-1",
+        "deliveries": [{
+          "places": [{
+            "location": { "lat": 34.0522, "lng": -118.2437 },
+            "duration": 1800.0
+          }],
+          "demand": [1]
+        }]
+      },
+      {
+        "id": "visit-2-pinned-to-alice",
+        "deliveries": [{
+          "places": [{
+            "location": { "lat": 34.0622, "lng": -118.2537 },
+            "duration": 1800.0
+          }],
+          "demand": [1]
+        }],
+        "skills": {
+          "allOf": ["driver-alice"]
+        }
+      },
+      {
+        "id": "visit-3-pinned-time-10am",
+        "deliveries": [{
+          "places": [{
+            "location": { "lat": 34.0722, "lng": -118.2637 },
+            "duration": 1800.0,
+            "times": [["2024-01-15T10:00:00Z", "2024-01-15T11:00:00Z"]]
+          }],
+          "demand": [1]
+        }]
+      },
+      {
+        "id": "visit-4",
+        "deliveries": [{
+          "places": [{
+            "location": { "lat": 34.0422, "lng": -118.2337 },
+            "duration": 1800.0
+          }],
+          "demand": [1]
+        }]
+      },
+      {
+        "id": "visit-5",
+        "deliveries": [{
+          "places": [{
+            "location": { "lat": 34.0322, "lng": -118.2237 },
+            "duration": 1800.0
+          }],
+          "demand": [1]
+        }]
+      },
+      {
+        "id": "visit-6-pinned-to-bob",
+        "deliveries": [{
+          "places": [{
+            "location": { "lat": 34.0822, "lng": -118.2737 },
+            "duration": 1800.0
+          }],
+          "demand": [1]
+        }],
+        "skills": {
+          "allOf": ["driver-bob"]
+        }
+      },
+      {
+        "id": "visit-7",
+        "deliveries": [{
+          "places": [{
+            "location": { "lat": 34.0122, "lng": -118.2137 },
+            "duration": 1800.0
+          }],
+          "demand": [1]
+        }]
+      },
+      {
+        "id": "visit-8-pinned-time-2pm",
+        "deliveries": [{
+          "places": [{
+            "location": { "lat": 34.0922, "lng": -118.2837 },
+            "duration": 1800.0,
+            "times": [["2024-01-15T14:00:00Z", "2024-01-15T15:00:00Z"]]
+          }],
+          "demand": [1]
+        }]
+      },
+      {
+        "id": "visit-9",
+        "deliveries": [{
+          "places": [{
+            "location": { "lat": 34.0222, "lng": -118.2037 },
+            "duration": 1800.0
+          }],
+          "demand": [1]
+        }]
+      },
+      {
+        "id": "visit-10",
+        "deliveries": [{
+          "places": [{
+            "location": { "lat": 34.1022, "lng": -118.2937 },
+            "duration": 1800.0
+          }],
+          "demand": [1]
+        }]
+      }
+    ]
+  },
+  "fleet": {
+    "vehicles": [
+      {
+        "typeId": "alice-type",
+        "vehicleIds": ["alice-truck"],
+        "profile": {
+          "matrix": "car"
+        },
+        "costs": {
+          "fixed": 0.0,
+          "distance": 0.001,
+          "time": 0.001
+        },
+        "shifts": [{
+          "start": {
+            "earliest": "2024-01-15T08:00:00Z",
+            "location": { "lat": 34.0500, "lng": -118.2500 }
+          },
+          "end": {
+            "latest": "2024-01-15T17:00:00Z",
+            "location": { "lat": 34.0500, "lng": -118.2500 }
+          },
+          "breaks": [{
+            "time": ["2024-01-15T12:00:00Z", "2024-01-15T13:00:00Z"],
+            "places": [{
+              "duration": 1800.0
+            }]
+          }]
+        }],
+        "capacity": [10],
+        "skills": ["driver-alice"]
+      },
+      {
+        "typeId": "bob-type",
+        "vehicleIds": ["bob-truck"],
+        "profile": {
+          "matrix": "car"
+        },
+        "costs": {
+          "fixed": 0.0,
+          "distance": 0.001,
+          "time": 0.001
+        },
+        "shifts": [{
+          "start": {
+            "earliest": "2024-01-15T08:00:00Z",
+            "location": { "lat": 34.0600, "lng": -118.2600 }
+          },
+          "end": {
+            "latest": "2024-01-15T17:00:00Z",
+            "location": { "lat": 34.0600, "lng": -118.2600 }
+          },
+          "breaks": [{
+            "time": ["2024-01-15T12:00:00Z", "2024-01-15T13:00:00Z"],
+            "places": [{
+              "duration": 1800.0
+            }]
+          }]
+        }],
+        "capacity": [10],
+        "skills": ["driver-bob"]
+      },
+      {
+        "typeId": "charlie-type",
+        "vehicleIds": ["charlie-truck"],
+        "profile": {
+          "matrix": "car"
+        },
+        "costs": {
+          "fixed": 0.0,
+          "distance": 0.001,
+          "time": 0.001
+        },
+        "shifts": [{
+          "start": {
+            "earliest": "2024-01-15T08:00:00Z",
+            "location": { "lat": 34.0400, "lng": -118.2400 }
+          },
+          "end": {
+            "latest": "2024-01-15T17:00:00Z",
+            "location": { "lat": 34.0400, "lng": -118.2400 }
+          }
+        }],
+        "capacity": [10]
+      }
+    ],
+    "profiles": [{
+      "name": "car"
+    }]
+  }
+}

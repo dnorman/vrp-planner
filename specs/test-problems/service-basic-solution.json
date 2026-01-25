@@ -1,0 +1,361 @@
+{
+  "statistic": {
+    "cost": 51.528999999999996,
+    "distance": 26096,
+    "duration": 25433,
+    "times": {
+      "driving": 2612,
+      "serving": 18000,
+      "waiting": 3021,
+      "break": 1800,
+      "commuting": 0,
+      "parking": 0
+    }
+  },
+  "tours": [
+    {
+      "vehicleId": "bob-truck",
+      "typeId": "bob-type",
+      "shiftIndex": 0,
+      "stops": [
+        {
+          "location": {
+            "lat": 34.06,
+            "lng": -118.26
+          },
+          "time": {
+            "arrival": "2024-01-15T08:00:00Z",
+            "departure": "2024-01-15T10:57:40Z"
+          },
+          "distance": 0,
+          "load": [
+            4
+          ],
+          "activities": [
+            {
+              "jobId": "departure",
+              "type": "departure"
+            }
+          ]
+        },
+        {
+          "location": {
+            "lat": 34.0722,
+            "lng": -118.2637
+          },
+          "time": {
+            "arrival": "2024-01-15T11:00:00Z",
+            "departure": "2024-01-15T11:30:00Z"
+          },
+          "distance": 1400,
+          "load": [
+            3
+          ],
+          "activities": [
+            {
+              "jobId": "visit-3-pinned-time-10am",
+              "type": "delivery"
+            }
+          ]
+        },
+        {
+          "location": {
+            "lat": 34.0822,
+            "lng": -118.2737
+          },
+          "time": {
+            "arrival": "2024-01-15T11:32:25Z",
+            "departure": "2024-01-15T12:32:25Z"
+          },
+          "distance": 2845,
+          "load": [
+            2
+          ],
+          "activities": [
+            {
+              "jobId": "visit-6-pinned-to-bob",
+              "type": "delivery",
+              "location": {
+                "lat": 34.0822,
+                "lng": -118.2737
+              },
+              "time": {
+                "start": "2024-01-15T11:32:25Z",
+                "end": "2024-01-15T12:02:25Z"
+              }
+            },
+            {
+              "jobId": "break",
+              "type": "break",
+              "location": {
+                "lat": 34.0822,
+                "lng": -118.2737
+              },
+              "time": {
+                "start": "2024-01-15T12:02:25Z",
+                "end": "2024-01-15T12:32:25Z"
+              }
+            }
+          ]
+        },
+        {
+          "location": {
+            "lat": 34.1022,
+            "lng": -118.2937
+          },
+          "time": {
+            "arrival": "2024-01-15T12:37:14Z",
+            "departure": "2024-01-15T13:07:14Z"
+          },
+          "distance": 5736,
+          "load": [
+            1
+          ],
+          "activities": [
+            {
+              "jobId": "visit-10",
+              "type": "delivery"
+            }
+          ]
+        },
+        {
+          "location": {
+            "lat": 34.0922,
+            "lng": -118.2837
+          },
+          "time": {
+            "arrival": "2024-01-15T13:09:39Z",
+            "departure": "2024-01-15T14:30:00Z"
+          },
+          "distance": 7181,
+          "load": [
+            0
+          ],
+          "activities": [
+            {
+              "jobId": "visit-8-pinned-time-2pm",
+              "type": "delivery",
+              "time": {
+                "start": "2024-01-15T14:00:00Z",
+                "end": "2024-01-15T14:30:00Z"
+              }
+            }
+          ]
+        },
+        {
+          "location": {
+            "lat": 34.06,
+            "lng": -118.26
+          },
+          "time": {
+            "arrival": "2024-01-15T14:37:00Z",
+            "departure": "2024-01-15T14:37:00Z"
+          },
+          "distance": 11379,
+          "load": [
+            0
+          ],
+          "activities": [
+            {
+              "jobId": "arrival",
+              "type": "arrival"
+            }
+          ]
+        }
+      ],
+      "statistic": {
+        "cost": 24.539,
+        "distance": 11379,
+        "duration": 13160,
+        "times": {
+          "driving": 1139,
+          "serving": 7200,
+          "waiting": 3021,
+          "break": 1800,
+          "commuting": 0,
+          "parking": 0
+        }
+      }
+    },
+    {
+      "vehicleId": "alice-truck",
+      "typeId": "alice-type",
+      "shiftIndex": 0,
+      "stops": [
+        {
+          "location": {
+            "lat": 34.05,
+            "lng": -118.25
+          },
+          "time": {
+            "arrival": "2024-01-15T08:00:00Z",
+            "departure": "2024-01-15T08:00:00Z"
+          },
+          "distance": 0,
+          "load": [
+            6
+          ],
+          "activities": [
+            {
+              "jobId": "departure",
+              "type": "departure"
+            }
+          ]
+        },
+        {
+          "location": {
+            "lat": 34.0122,
+            "lng": -118.2137
+          },
+          "time": {
+            "arrival": "2024-01-15T08:08:58Z",
+            "departure": "2024-01-15T08:38:58Z"
+          },
+          "distance": 5378,
+          "load": [
+            5
+          ],
+          "activities": [
+            {
+              "jobId": "visit-7",
+              "type": "delivery"
+            }
+          ]
+        },
+        {
+          "location": {
+            "lat": 34.0222,
+            "lng": -118.2037
+          },
+          "time": {
+            "arrival": "2024-01-15T08:41:23Z",
+            "departure": "2024-01-15T09:11:23Z"
+          },
+          "distance": 6824,
+          "load": [
+            4
+          ],
+          "activities": [
+            {
+              "jobId": "visit-9",
+              "type": "delivery"
+            }
+          ]
+        },
+        {
+          "location": {
+            "lat": 34.0322,
+            "lng": -118.2237
+          },
+          "time": {
+            "arrival": "2024-01-15T09:14:58Z",
+            "departure": "2024-01-15T09:44:58Z"
+          },
+          "distance": 8979,
+          "load": [
+            3
+          ],
+          "activities": [
+            {
+              "jobId": "visit-5",
+              "type": "delivery"
+            }
+          ]
+        },
+        {
+          "location": {
+            "lat": 34.0422,
+            "lng": -118.2337
+          },
+          "time": {
+            "arrival": "2024-01-15T09:47:23Z",
+            "departure": "2024-01-15T10:17:23Z"
+          },
+          "distance": 10425,
+          "load": [
+            2
+          ],
+          "activities": [
+            {
+              "jobId": "visit-4",
+              "type": "delivery"
+            }
+          ]
+        },
+        {
+          "location": {
+            "lat": 34.0522,
+            "lng": -118.2437
+          },
+          "time": {
+            "arrival": "2024-01-15T10:19:48Z",
+            "departure": "2024-01-15T10:49:48Z"
+          },
+          "distance": 11871,
+          "load": [
+            1
+          ],
+          "activities": [
+            {
+              "jobId": "visit-1",
+              "type": "delivery"
+            }
+          ]
+        },
+        {
+          "location": {
+            "lat": 34.0622,
+            "lng": -118.2537
+          },
+          "time": {
+            "arrival": "2024-01-15T10:52:13Z",
+            "departure": "2024-01-15T11:22:13Z"
+          },
+          "distance": 13317,
+          "load": [
+            0
+          ],
+          "activities": [
+            {
+              "jobId": "visit-2-pinned-to-alice",
+              "type": "delivery"
+            }
+          ]
+        },
+        {
+          "location": {
+            "lat": 34.05,
+            "lng": -118.25
+          },
+          "time": {
+            "arrival": "2024-01-15T11:24:33Z",
+            "departure": "2024-01-15T11:24:33Z"
+          },
+          "distance": 14717,
+          "load": [
+            0
+          ],
+          "activities": [
+            {
+              "jobId": "arrival",
+              "type": "arrival"
+            }
+          ]
+        }
+      ],
+      "statistic": {
+        "cost": 26.989999999999995,
+        "distance": 14717,
+        "duration": 12273,
+        "times": {
+          "driving": 1473,
+          "serving": 10800,
+          "waiting": 0,
+          "break": 0,
+          "commuting": 0,
+          "parking": 0
+        }
+      }
+    }
+  ]
+}

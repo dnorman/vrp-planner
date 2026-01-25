@@ -1,0 +1,6 @@
+/target
+/osrm-data
+/node_modules
+/dist
+/.claude
+/quarantine
