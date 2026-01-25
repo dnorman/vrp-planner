@@ -6,8 +6,8 @@
 - [x] Define pin enum + fields (visitor/date/both).
 - [x] Confirm committed vs target time window fields.
 - [x] Define estimated window output schema (seconds from midnight, start/end pairs).
-- [ ] Add `current_visitor_id()` to Visit trait for stability.
-- [ ] Add unassigned reason codes to solver output.
+- [x] Add `current_visitor_id()` to Visit trait for stability.
+- [x] Add unassigned reason codes to solver output.
 
 ## Research
 
@@ -17,11 +17,12 @@
 
 ## Tests
 
-- [ ] Build fixtures (3-10 vehicles, 20-100 jobs).
-- [ ] Add tests for pinned worker/date, committed window, target time.
-- [ ] Add tests for stability penalty (reassignment).
-- [ ] Add tests for capability matching (superset).
-- [ ] Mock availability service responses.
+- [x] Build fixtures (3-10 vehicles, 20-100 jobs).
+- [x] Add tests for pinned worker/date, committed window, target time.
+- [x] Add tests for stability penalty (reassignment).
+- [x] Add tests for capability matching (superset).
+- [x] Mock availability service responses.
+- [x] Add scale tests (50/100 visits, performance validation).
 - [ ] Add benchmark cases comparing Haversine vs map-based matrix.
 - [x] Add OSRM sidecar integration test (MLD).
 
