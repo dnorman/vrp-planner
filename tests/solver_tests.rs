@@ -695,6 +695,694 @@ fn test_empty_visits() {
     assert!(result.routes.iter().all(|r| r.visit_ids.is_empty()));
 }
 
+#[test]
+fn test_single_visit_single_visitor() {
+    // Simplest possible case
+    let visits = vec![TestVisit::new("v1").location(1.0, 0.0).duration(30)];
+    let visitors = vec![TestVisitor::new("alice").start_location(0.0, 0.0)];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    assert!(result.unassigned.is_empty(), "Visit should be assigned");
+    let alice_visits = get_visitor_visits(&result, "alice");
+    assert_eq!(alice_visits.len(), 1);
+    assert!(alice_visits.contains(&"v1"));
+}
+
+// ============================================================================
+// Additional Time Window Tests
+// ============================================================================
+
+#[test]
+fn test_narrow_committed_window_30_minutes() {
+    // Very tight 30-minute committed window
+    let visits = vec![
+        TestVisit::new("tight")
+            .location(1.0, 0.0)
+            .duration(20)
+            .committed_window(hours(10), hours(10) + minutes(30)),
+    ];
+    let visitors = vec![TestVisitor::new("alice").start_location(0.0, 0.0)];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    assert!(result.unassigned.is_empty(), "Visit should fit in 30-min window");
+
+    let route = &result.routes[0];
+    let (start, _) = route.estimated_windows[0];
+    assert!(start >= hours(10), "Should start at or after 10am");
+    assert!(start <= hours(10) + minutes(30), "Should start before 10:30am");
+}
+
+#[test]
+fn test_visit_at_day_start() {
+    // Committed window right at the start of the day
+    let visits = vec![
+        TestVisit::new("early")
+            .location(0.1, 0.0) // Very close to start location
+            .duration(30)
+            .committed_window(hours(8), hours(9)),
+    ];
+    let visitors = vec![TestVisitor::new("alice").start_location(0.0, 0.0)];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    assert!(result.unassigned.is_empty(), "Early visit should be assigned");
+    let route = &result.routes[0];
+    let (start, _) = route.estimated_windows[0];
+    assert!(start >= hours(8), "Should start at or after 8am");
+}
+
+#[test]
+fn test_visit_at_day_end() {
+    // Visit scheduled near end of day
+    let visits = vec![
+        TestVisit::new("late")
+            .location(0.1, 0.0)
+            .duration(30)
+            .committed_window(hours(16), hours(17)),
+    ];
+    let visitors = vec![TestVisitor::new("alice").start_location(0.0, 0.0)];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    assert!(result.unassigned.is_empty(), "Late visit should be assigned");
+    let route = &result.routes[0];
+    let (start, _) = route.estimated_windows[0];
+    assert!(start >= hours(16), "Should start at or after 4pm");
+}
+
+#[test]
+fn test_visit_duration_exceeds_remaining_window() {
+    // 3-hour visit but only 2 hours left in window
+    let visits = vec![
+        TestVisit::new("long")
+            .location(0.1, 0.0)
+            .duration(180) // 3 hours
+            .committed_window(hours(15), hours(17)), // Only 2 hours available
+    ];
+    let visitors = vec![TestVisitor::new("alice").start_location(0.0, 0.0)];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    // Visit should be unassigned - doesn't fit
+    assert_eq!(result.unassigned.len(), 1, "Long visit shouldn't fit");
+}
+
+#[test]
+fn test_short_visit_15_minutes() {
+    // Very short visit (quick check/inspection)
+    let visits = vec![
+        TestVisit::new("quick").location(1.0, 0.0).duration(15),
+    ];
+    let visitors = vec![TestVisitor::new("alice").start_location(0.0, 0.0)];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    assert!(result.unassigned.is_empty());
+}
+
+#[test]
+fn test_long_visit_3_hours() {
+    // Major repair - 3 hour visit
+    let visits = vec![
+        TestVisit::new("major_repair").location(1.0, 0.0).duration(180),
+    ];
+    let visitors = vec![TestVisitor::new("alice").start_location(0.0, 0.0)];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    assert!(result.unassigned.is_empty(), "3-hour visit should fit in 9-hour day");
+}
+
+#[test]
+fn test_mixed_durations_same_route() {
+    // Mix of short and long visits on same route
+    let visits = vec![
+        TestVisit::new("quick1").location(1.0, 0.0).duration(15),
+        TestVisit::new("medium").location(2.0, 0.0).duration(45),
+        TestVisit::new("long").location(3.0, 0.0).duration(120),
+        TestVisit::new("quick2").location(4.0, 0.0).duration(15),
+    ];
+    let visitors = vec![TestVisitor::new("alice").start_location(0.0, 0.0)];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    // Total: 15+45+120+15 = 195 min = 3.25 hours - should fit
+    assert!(result.unassigned.is_empty(), "Mixed duration visits should fit");
+    assert_eq!(get_visitor_visits(&result, "alice").len(), 4);
+}
+
+// ============================================================================
+// Additional Pinning Tests
+// ============================================================================
+
+#[test]
+fn test_pinned_to_visitor_and_date() {
+    // Visit must be specific tech on specific day
+    let visits = vec![
+        TestVisit::new("v1")
+            .location(1.0, 0.0)
+            .pinned_to_visitor("alice")
+            .pinned_to_date(1),
+    ];
+    let visitors = vec![
+        TestVisitor::new("alice"),
+        TestVisitor::new("bob"),
+    ];
+
+    let result = solve(
+        1, // Correct date
+        &visits,
+        &visitors,
+        &TestAvailability::new(),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    let alice_visits = get_visitor_visits(&result, "alice");
+    assert!(alice_visits.contains(&"v1"), "v1 should go to alice on date 1");
+}
+
+#[test]
+fn test_pinned_visitor_and_wrong_date() {
+    // Visit pinned to alice but for a different date
+    let visits = vec![
+        TestVisit::new("v1")
+            .location(1.0, 0.0)
+            .pinned_to_visitor("alice")
+            .pinned_to_date(2), // Wrong date
+    ];
+    let visitors = vec![TestVisitor::new("alice")];
+
+    let result = solve(
+        1, // Service date is 1, not 2
+        &visits,
+        &visitors,
+        &TestAvailability::new(),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    let wrong_date = get_unassigned_with_reason(&result, UnassignedReason::WrongDate);
+    assert!(wrong_date.contains(&"v1"), "v1 should be unassigned (wrong date)");
+}
+
+#[test]
+fn test_multiple_visits_pinned_same_tech() {
+    // Several customers all request the same technician
+    let visits = vec![
+        TestVisit::new("v1").location(1.0, 0.0).duration(30).pinned_to_visitor("alice"),
+        TestVisit::new("v2").location(2.0, 0.0).duration(30).pinned_to_visitor("alice"),
+        TestVisit::new("v3").location(3.0, 0.0).duration(30).pinned_to_visitor("alice"),
+        TestVisit::new("v4").location(4.0, 0.0).duration(30), // Not pinned
+    ];
+    let visitors = vec![
+        TestVisitor::new("alice").start_location(0.0, 0.0),
+        TestVisitor::new("bob").start_location(0.0, 0.0),
+    ];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    let alice_visits = get_visitor_visits(&result, "alice");
+
+    // All 3 pinned visits must be with alice
+    assert!(alice_visits.contains(&"v1"), "v1 pinned to alice");
+    assert!(alice_visits.contains(&"v2"), "v2 pinned to alice");
+    assert!(alice_visits.contains(&"v3"), "v3 pinned to alice");
+
+    // v4 can go to either (likely bob for balance)
+    assert!(result.unassigned.is_empty(), "All visits should be assigned");
+}
+
+// ============================================================================
+// Additional Capability Tests
+// ============================================================================
+
+#[test]
+fn test_visit_requires_multiple_capabilities() {
+    // Visit requires BOTH plumbing AND electrical
+    let visits = vec![
+        TestVisit::new("complex")
+            .location(1.0, 0.0)
+            .requires("plumbing")
+            .requires("electrical"),
+    ];
+    let visitors = vec![
+        TestVisitor::new("plumber").capability("plumbing"),
+        TestVisitor::new("electrician").capability("electrical"),
+        TestVisitor::new("generalist").capability("plumbing").capability("electrical"),
+    ];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new(),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    // Only generalist can do this visit
+    let generalist_visits = get_visitor_visits(&result, "generalist");
+    assert!(generalist_visits.contains(&"complex"), "complex should go to generalist");
+}
+
+#[test]
+fn test_multiple_techs_same_capability_choose_closest() {
+    // Two plumbers - visit should go to the closer one
+    let visits = vec![
+        TestVisit::new("plumb_job")
+            .location(9.0, 0.0) // Closer to bob
+            .requires("plumbing"),
+    ];
+    let visitors = vec![
+        TestVisitor::new("alice").start_location(0.0, 0.0).capability("plumbing"),
+        TestVisitor::new("bob").start_location(10.0, 0.0).capability("plumbing"),
+    ];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new(),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    // Bob is closer (1 unit away vs 9 units)
+    let bob_visits = get_visitor_visits(&result, "bob");
+    assert!(bob_visits.contains(&"plumb_job"), "Visit should go to closer tech (bob)");
+}
+
+#[test]
+fn test_rare_skill_only_one_tech() {
+    // Only one tech has HVAC certification
+    let visits = vec![
+        TestVisit::new("hvac1").location(1.0, 0.0).requires("hvac"),
+        TestVisit::new("hvac2").location(2.0, 0.0).requires("hvac"),
+        TestVisit::new("general").location(3.0, 0.0),
+    ];
+    let visitors = vec![
+        TestVisitor::new("alice").capability("plumbing"),
+        TestVisitor::new("bob").capability("hvac"),
+        TestVisitor::new("charlie").capability("electrical"),
+    ];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new(),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    let bob_visits = get_visitor_visits(&result, "bob");
+    assert!(bob_visits.contains(&"hvac1"), "hvac1 must go to bob");
+    assert!(bob_visits.contains(&"hvac2"), "hvac2 must go to bob");
+}
+
+// ============================================================================
+// Variable Availability / Part-Time Tests
+// ============================================================================
+
+#[test]
+fn test_part_time_morning_only() {
+    // Alice only works mornings (8am-12pm)
+    let visits = vec![
+        TestVisit::new("morning1").location(1.0, 0.0).duration(60),
+        TestVisit::new("morning2").location(2.0, 0.0).duration(60),
+        TestVisit::new("afternoon").location(3.0, 0.0).duration(60)
+            .committed_window(hours(14), hours(16)), // Must be afternoon
+    ];
+    let visitors = vec![
+        TestVisitor::new("alice").start_location(0.0, 0.0), // Morning only
+        TestVisitor::new("bob").start_location(0.0, 0.0),   // Full day
+    ];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new()
+            .visitor_window("alice", hours(8), hours(12)) // Morning only
+            .default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    // Afternoon visit must go to bob
+    let bob_visits = get_visitor_visits(&result, "bob");
+    assert!(bob_visits.contains(&"afternoon"), "Afternoon visit must go to full-day worker");
+}
+
+#[test]
+fn test_staggered_start_times() {
+    // Techs start at different times
+    let visits = vec![
+        TestVisit::new("early").location(1.0, 0.0).duration(30)
+            .committed_window(hours(7), hours(8)),
+        TestVisit::new("normal").location(2.0, 0.0).duration(30),
+    ];
+    let visitors = vec![
+        TestVisitor::new("early_bird").start_location(0.0, 0.0), // Starts 6am
+        TestVisitor::new("normal").start_location(0.0, 0.0),     // Starts 8am
+    ];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new()
+            .visitor_window("early_bird", hours(6), hours(14)) // Early shift
+            .visitor_window("normal", hours(8), hours(17)),    // Normal shift
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    // Early visit (7-8am) must go to early_bird
+    let early_bird_visits = get_visitor_visits(&result, "early_bird");
+    assert!(early_bird_visits.contains(&"early"), "7am visit needs early starter");
+}
+
+#[test]
+fn test_mid_day_break() {
+    // Simulate lunch break by having no availability 12-1pm
+    // Note: Current model doesn't support breaks within a day,
+    // but we can test that visits don't overlap if visitor window is set
+    let visits = vec![
+        TestVisit::new("v1").location(1.0, 0.0).duration(60),
+        TestVisit::new("v2").location(2.0, 0.0).duration(60),
+        TestVisit::new("v3").location(3.0, 0.0).duration(60),
+    ];
+    let visitors = vec![
+        TestVisitor::new("alice").start_location(0.0, 0.0),
+    ];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    // Just verify all get assigned - break handling is future work
+    assert_eq!(result.unassigned.len(), 0);
+}
+
+// ============================================================================
+// Geographic / Clustering Tests
+// ============================================================================
+
+#[test]
+fn test_geographic_clustering() {
+    // Visits clustered in two areas - should be assigned to nearby techs
+    let visits = vec![
+        // North cluster
+        TestVisit::new("n1").location(0.0, 10.0).duration(30),
+        TestVisit::new("n2").location(1.0, 10.0).duration(30),
+        TestVisit::new("n3").location(0.5, 11.0).duration(30),
+        // South cluster
+        TestVisit::new("s1").location(0.0, 0.0).duration(30),
+        TestVisit::new("s2").location(1.0, 0.0).duration(30),
+        TestVisit::new("s3").location(0.5, 1.0).duration(30),
+    ];
+    let visitors = vec![
+        TestVisitor::new("north_tech").start_location(0.0, 10.0),
+        TestVisitor::new("south_tech").start_location(0.0, 0.0),
+    ];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    let north_visits = get_visitor_visits(&result, "north_tech");
+    let south_visits = get_visitor_visits(&result, "south_tech");
+
+    // North tech should get north cluster
+    assert!(north_visits.contains(&"n1") || north_visits.contains(&"n2") || north_visits.contains(&"n3"),
+        "North tech should have north visits: {:?}", north_visits);
+
+    // South tech should get south cluster
+    assert!(south_visits.contains(&"s1") || south_visits.contains(&"s2") || south_visits.contains(&"s3"),
+        "South tech should have south visits: {:?}", south_visits);
+}
+
+#[test]
+fn test_minimize_backtracking() {
+    // Visits in a line - should be done in order, not zigzag
+    let visits = vec![
+        TestVisit::new("a").location(1.0, 0.0).duration(10),
+        TestVisit::new("b").location(2.0, 0.0).duration(10),
+        TestVisit::new("c").location(3.0, 0.0).duration(10),
+        TestVisit::new("d").location(4.0, 0.0).duration(10),
+    ];
+    let visitors = vec![TestVisitor::new("alice").start_location(0.0, 0.0)];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    let route = &result.routes[0];
+
+    // With local search, route should be a->b->c->d (or reverse)
+    // Check total travel time is reasonable (4 units forward, not zigzag)
+    // Optimal: 1+1+1+1 = 4 units = 4*60 = 240 seconds (at 60s/unit in ManhattanMatrix)
+    // Bad zigzag could be much worse
+    assert!(route.total_travel_time <= 300 * 60,
+        "Travel time should be reasonable: {}", route.total_travel_time);
+}
+
+// ============================================================================
+// Same Location Tests
+// ============================================================================
+
+#[test]
+fn test_multiple_visits_same_address() {
+    // Two different services at the same property
+    let visits = vec![
+        TestVisit::new("pool_clean").location(5.0, 5.0).duration(30),
+        TestVisit::new("filter_check").location(5.0, 5.0).duration(15), // Same location
+    ];
+    let visitors = vec![TestVisitor::new("alice").start_location(0.0, 0.0)];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    // Both should be assigned, ideally back-to-back
+    assert!(result.unassigned.is_empty());
+
+    let route = &result.routes[0];
+    assert_eq!(route.visit_ids.len(), 2);
+
+    // Check they're scheduled consecutively (travel between should be 0)
+    let windows = &route.estimated_windows;
+    let first_end = windows[0].1;
+    let second_start = windows[1].0;
+
+    // Second visit should start right after first (0 travel time)
+    assert!(second_start <= first_end + 60,
+        "Same-location visits should be back-to-back: first ends {}, second starts {}",
+        first_end, second_start);
+}
+
+// ============================================================================
+// Workload Balance Tests
+// ============================================================================
+
+#[test]
+fn test_workload_roughly_balanced() {
+    // 10 visits, 2 techs - should be roughly 5 each
+    let visits: Vec<TestVisit> = (0..10)
+        .map(|i| TestVisit::new(&format!("v{}", i)).location(i as f64, 0.0).duration(30))
+        .collect();
+    let visitors = vec![
+        TestVisitor::new("alice").start_location(0.0, 0.0),
+        TestVisitor::new("bob").start_location(10.0, 0.0),
+    ];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    let alice_count = get_visitor_visits(&result, "alice").len();
+    let bob_count = get_visitor_visits(&result, "bob").len();
+
+    // Should be somewhat balanced (not all to one person)
+    assert!(alice_count >= 3, "Alice should have at least 3 visits: {}", alice_count);
+    assert!(bob_count >= 3, "Bob should have at least 3 visits: {}", bob_count);
+}
+
+// ============================================================================
+// Edge Cases
+// ============================================================================
+
+#[test]
+fn test_visit_exactly_fills_window() {
+    // Visit duration exactly matches available window
+    let visits = vec![
+        TestVisit::new("perfect_fit")
+            .location(0.0, 0.0) // At start location, no travel
+            .duration(60) // 1 hour
+            .committed_window(hours(10), hours(11)), // Exactly 1 hour window
+    ];
+    let visitors = vec![TestVisitor::new("alice").start_location(0.0, 0.0)];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    assert!(result.unassigned.is_empty(), "Perfect fit should work");
+}
+
+#[test]
+fn test_all_techs_unavailable() {
+    // Everyone called in sick
+    let visits = vec![
+        TestVisit::new("v1").location(1.0, 0.0),
+        TestVisit::new("v2").location(2.0, 0.0),
+    ];
+    let visitors = vec![
+        TestVisitor::new("alice"),
+        TestVisitor::new("bob"),
+    ];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new()
+            .visitor_unavailable("alice")
+            .visitor_unavailable("bob"),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    // All visits should be unassigned
+    assert_eq!(result.unassigned.len(), 2, "All visits should be unassigned");
+}
+
+#[test]
+fn test_two_of_three_techs_sick() {
+    // Heavy load on remaining tech
+    let visits: Vec<TestVisit> = (0..6)
+        .map(|i| TestVisit::new(&format!("v{}", i)).location(i as f64, 0.0).duration(30))
+        .collect();
+    let visitors = vec![
+        TestVisitor::new("alice"),
+        TestVisitor::new("bob"),
+        TestVisitor::new("charlie"),
+    ];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new()
+            .visitor_unavailable("alice")
+            .visitor_unavailable("bob")
+            .default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    // All 6 visits should go to charlie
+    let charlie_visits = get_visitor_visits(&result, "charlie");
+    assert_eq!(charlie_visits.len(), 6, "Charlie should handle all 6 visits");
+}
+
 // ============================================================================
 // Local Search Tests
 // ============================================================================
