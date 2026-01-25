@@ -5,12 +5,12 @@
 - [x] Implement cheapest insertion construction.
 - [x] Define solution cost components (travel time, target deviation, stability penalty).
 - [x] Define time budget and stability penalty defaults (see spec.md Cost Weights).
+- [x] Implement 2-opt operator (segment reversal).
+- [x] Implement relocate operator (inter/intra-route moves).
 
 ## In Progress
 
-- [ ] Implement relocate operator (inter/intra-route moves).
-- [ ] Implement 2-opt operator (segment reversal).
-- [ ] Add stability penalty to cost function (requires `current_visitor_id()` on Visit).
+- [ ] Add stability penalty to cost function (use `current_visitor_id()` from Visit trait).
 
 ## Future (v2)
 

@@ -28,8 +28,8 @@
 ## Implementation
 
 - [x] Cheapest insertion construction.
-- [ ] Relocate operator (local search).
-- [ ] 2-opt operator (local search).
+- [x] 2-opt operator (local search).
+- [x] Relocate operator (local search).
 - [ ] Stability penalty in cost function.
 - [ ] RoutePlan creation flow (lazy creation on optimization runs).
 - [ ] Assignment + sequencing persistence.

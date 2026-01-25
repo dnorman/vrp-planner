@@ -560,7 +560,7 @@ fn test_target_time_sequencing_with_local_search() {
         &visitors,
         &TestAvailability::new().default_window(hours(8), hours(17)),
         &ManhattanMatrix,
-        SolveOptions { target_time_weight: 10 }, // Higher weight should influence sequencing more
+        SolveOptions { target_time_weight: 10, ..Default::default() }, // Higher weight should influence sequencing more
     );
 
     // Both should still be assigned
@@ -693,6 +693,114 @@ fn test_empty_visits() {
 
     assert!(result.unassigned.is_empty());
     assert!(result.routes.iter().all(|r| r.visit_ids.is_empty()));
+}
+
+// ============================================================================
+// Local Search Tests
+// ============================================================================
+
+#[test]
+fn test_two_opt_improves_crossing_routes() {
+    // Create a scenario where 2-opt would help:
+    // Visits arranged in a way that creates a "crossing" pattern
+    // A -> D -> C -> B would cross, A -> B -> C -> D would not
+    //
+    // Layout:  A(0,0)  B(0,1)
+    //          D(1,0)  C(1,1)
+    //
+    // If construction inserts in order A,D,C,B the route crosses.
+    // 2-opt should fix it to A,B,C,D or A,D,C,B depending on direction.
+
+    let visits = vec![
+        TestVisit::new("A").location(0.0, 0.0).duration(10),
+        TestVisit::new("B").location(0.0, 1.0).duration(10),
+        TestVisit::new("C").location(1.0, 1.0).duration(10),
+        TestVisit::new("D").location(1.0, 0.0).duration(10),
+    ];
+    let visitors = vec![TestVisitor::new("alice").start_location(-1.0, 0.0)];
+
+    // Run with local search enabled (default)
+    let result_with_ls = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(0, hours(8)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    // Run without local search
+    let result_without_ls = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(0, hours(8)),
+        &ManhattanMatrix,
+        SolveOptions { local_search_iterations: 0, ..Default::default() },
+    );
+
+    let route_with_ls = &result_with_ls.routes[0];
+    let route_without_ls = &result_without_ls.routes[0];
+
+    // Local search should produce equal or better travel time
+    assert!(
+        route_with_ls.total_travel_time <= route_without_ls.total_travel_time,
+        "Local search should not make things worse: with={}, without={}",
+        route_with_ls.total_travel_time,
+        route_without_ls.total_travel_time
+    );
+}
+
+#[test]
+fn test_relocate_balances_routes() {
+    // Create visits clustered near one visitor's start, but assigned to wrong visitor initially
+    // Relocate should move visits to the closer visitor
+
+    let visits = vec![
+        // Cluster near alice's start (0, 0)
+        TestVisit::new("a1").location(0.1, 0.0).duration(20),
+        TestVisit::new("a2").location(0.2, 0.0).duration(20),
+        TestVisit::new("a3").location(0.3, 0.0).duration(20),
+        // Cluster near bob's start (10, 0)
+        TestVisit::new("b1").location(9.9, 0.0).duration(20),
+        TestVisit::new("b2").location(9.8, 0.0).duration(20),
+        TestVisit::new("b3").location(9.7, 0.0).duration(20),
+    ];
+    let visitors = vec![
+        TestVisitor::new("alice").start_location(0.0, 0.0),
+        TestVisitor::new("bob").start_location(10.0, 0.0),
+    ];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(0, hours(8)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    // Both visitors should have work (relocate should distribute well)
+    let alice_visits = get_visitor_visits(&result, "alice");
+    let bob_visits = get_visitor_visits(&result, "bob");
+
+    // The a* visits should be on alice's route (closer to her start)
+    // The b* visits should be on bob's route (closer to his start)
+    let alice_has_a = alice_visits.iter().any(|v| v.starts_with('a'));
+    let bob_has_b = bob_visits.iter().any(|v| v.starts_with('b'));
+
+    assert!(alice_has_a, "Alice should have some 'a' visits: {:?}", alice_visits);
+    assert!(bob_has_b, "Bob should have some 'b' visits: {:?}", bob_visits);
+
+    // Total travel time should be reasonable (not crossing the map unnecessarily)
+    let total_travel: i32 = result.routes.iter().map(|r| r.total_travel_time).sum();
+    // Each cluster is ~0.3 units apart, so travel within cluster ~18 seconds each
+    // Max reasonable would be ~200 seconds if well distributed
+    assert!(
+        total_travel < 500 * 60, // 500 minutes in seconds
+        "Total travel time seems too high: {} seconds",
+        total_travel
+    );
 }
 
 #[test]

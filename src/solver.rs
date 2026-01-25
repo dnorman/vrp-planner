@@ -6,12 +6,21 @@ use crate::traits::{AvailabilityProvider, DistanceMatrixProvider, UnassignedReas
 
 #[derive(Debug, Clone)]
 pub struct SolveOptions {
+    /// Weight for target time deviation penalty (per second).
     pub target_time_weight: i32,
+    /// Weight for reassigning a visit to a different visitor (stability penalty).
+    pub reassignment_penalty: i32,
+    /// Maximum iterations for local search improvement.
+    pub local_search_iterations: usize,
 }
 
 impl Default for SolveOptions {
     fn default() -> Self {
-        Self { target_time_weight: 1 }
+        Self {
+            target_time_weight: 1,
+            reassignment_penalty: 300, // ~5 minutes equivalent
+            local_search_iterations: 100,
+        }
     }
 }
 
@@ -168,6 +177,16 @@ where
         }
     }
 
+    // Local search improvement phase
+    local_search(
+        &mut routes,
+        service_date,
+        availability,
+        &matrix,
+        &index,
+        &options,
+    );
+
     let routes = routes
         .into_iter()
         .map(|route| RouteResult {
@@ -316,4 +335,277 @@ fn location_index(locations: &[(f64, f64)]) -> HashMap<String, usize> {
         index.insert(location_key(*location), i);
     }
     index
+}
+
+// ============================================================================
+// Local Search Operators
+// ============================================================================
+
+/// 2-opt: Reverse a segment within a route to reduce travel time.
+/// Returns true if an improvement was made.
+fn two_opt_improve<'a, V, R, A>(
+    route: &mut RouteState<'a, V, R>,
+    service_date: i64,
+    availability: &A,
+    matrix: &[Vec<i32>],
+    index: &HashMap<String, usize>,
+    target_weight: i32,
+) -> bool
+where
+    V: Visit,
+    R: Visitor<Id = V::VisitorId>,
+    A: AvailabilityProvider<VisitorId = V::VisitorId>,
+{
+    if route.visits.len() < 3 {
+        return false;
+    }
+
+    let current_cost = route.total_travel_time;
+    let n = route.visits.len();
+
+    for i in 0..n - 1 {
+        for j in i + 2..n {
+            // Reverse segment [i+1..=j]
+            let mut candidate = route.visits.clone();
+            candidate[i + 1..=j].reverse();
+
+            let candidate_route = RouteState {
+                visitor: route.visitor,
+                visits: candidate,
+                estimated_windows: Vec::new(),
+                total_travel_time: 0,
+            };
+
+            if let Some((windows, cost)) = compute_schedule(
+                service_date,
+                &candidate_route,
+                availability,
+                matrix,
+                index,
+                target_weight,
+            ) {
+                if cost < current_cost {
+                    route.visits[i + 1..=j].reverse();
+                    route.estimated_windows = windows;
+                    route.total_travel_time = cost;
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
+}
+
+/// Relocate: Move a visit from one route to another (or within the same route).
+/// Returns true if an improvement was made.
+fn relocate_improve<'a, V, R, A>(
+    routes: &mut [RouteState<'a, V, R>],
+    service_date: i64,
+    availability: &A,
+    matrix: &[Vec<i32>],
+    index: &HashMap<String, usize>,
+    target_weight: i32,
+) -> bool
+where
+    V: Visit,
+    R: Visitor<Id = V::VisitorId>,
+    A: AvailabilityProvider<VisitorId = V::VisitorId>,
+{
+    let total_cost: i32 = routes.iter().map(|r| r.total_travel_time).sum();
+
+    // Try moving each visit from each route to every other position
+    for from_route_idx in 0..routes.len() {
+        let from_route_len = routes[from_route_idx].visits.len();
+        if from_route_len == 0 {
+            continue;
+        }
+
+        for visit_idx in 0..from_route_len {
+            let visit = routes[from_route_idx].visits[visit_idx];
+
+            // Try inserting into every route (including same route, different position)
+            for to_route_idx in 0..routes.len() {
+                let to_route_len = routes[to_route_idx].visits.len();
+                let insert_positions = if from_route_idx == to_route_idx {
+                    to_route_len // same route: can insert at 0..len (excluding current position)
+                } else {
+                    to_route_len + 1 // different route: can insert at 0..=len
+                };
+
+                for insert_pos in 0..insert_positions {
+                    // Skip if same route and same or adjacent position (no change)
+                    if from_route_idx == to_route_idx {
+                        if insert_pos == visit_idx || insert_pos == visit_idx + 1 {
+                            continue;
+                        }
+                    }
+
+                    // Check capability match for target route
+                    let required = visit.required_capabilities();
+                    if !required.is_empty() {
+                        let available = routes[to_route_idx].visitor.capabilities();
+                        if !required.iter().all(|cap| available.contains(cap)) {
+                            continue;
+                        }
+                    }
+
+                    // Build candidate routes
+                    let mut from_candidate = routes[from_route_idx].visits.clone();
+                    from_candidate.remove(visit_idx);
+
+                    let mut to_candidate = if from_route_idx == to_route_idx {
+                        from_candidate.clone()
+                    } else {
+                        routes[to_route_idx].visits.clone()
+                    };
+
+                    let actual_insert_pos = if from_route_idx == to_route_idx && insert_pos > visit_idx {
+                        insert_pos - 1
+                    } else {
+                        insert_pos
+                    };
+                    to_candidate.insert(actual_insert_pos, visit);
+
+                    // Compute new schedules
+                    let from_route_state = RouteState {
+                        visitor: routes[from_route_idx].visitor,
+                        visits: if from_route_idx == to_route_idx {
+                            to_candidate.clone()
+                        } else {
+                            from_candidate
+                        },
+                        estimated_windows: Vec::new(),
+                        total_travel_time: 0,
+                    };
+
+                    let from_schedule = compute_schedule(
+                        service_date,
+                        &from_route_state,
+                        availability,
+                        matrix,
+                        index,
+                        target_weight,
+                    );
+
+                    if from_schedule.is_none() {
+                        continue;
+                    }
+
+                    let new_cost = if from_route_idx == to_route_idx {
+                        // Same route: just the new cost
+                        let (windows, cost) = from_schedule.unwrap();
+                        let other_cost: i32 = routes
+                            .iter()
+                            .enumerate()
+                            .filter(|(i, _)| *i != from_route_idx)
+                            .map(|(_, r)| r.total_travel_time)
+                            .sum();
+
+                        if cost + other_cost < total_cost {
+                            routes[from_route_idx].visits = to_candidate;
+                            routes[from_route_idx].estimated_windows = windows;
+                            routes[from_route_idx].total_travel_time = cost;
+                            return true;
+                        }
+                        continue;
+                    } else {
+                        // Different routes: compute both
+                        let to_route_state = RouteState {
+                            visitor: routes[to_route_idx].visitor,
+                            visits: to_candidate.clone(),
+                            estimated_windows: Vec::new(),
+                            total_travel_time: 0,
+                        };
+
+                        let to_schedule = compute_schedule(
+                            service_date,
+                            &to_route_state,
+                            availability,
+                            matrix,
+                            index,
+                            target_weight,
+                        );
+
+                        if to_schedule.is_none() {
+                            continue;
+                        }
+
+                        let (from_windows, from_cost) = from_schedule.unwrap();
+                        let (to_windows, to_cost) = to_schedule.unwrap();
+
+                        let other_cost: i32 = routes
+                            .iter()
+                            .enumerate()
+                            .filter(|(i, _)| *i != from_route_idx && *i != to_route_idx)
+                            .map(|(_, r)| r.total_travel_time)
+                            .sum();
+
+                        if from_cost + to_cost + other_cost < total_cost {
+                            // Apply the move
+                            routes[from_route_idx].visits.remove(visit_idx);
+                            routes[from_route_idx].estimated_windows = from_windows;
+                            routes[from_route_idx].total_travel_time = from_cost;
+
+                            routes[to_route_idx].visits.insert(insert_pos, visit);
+                            routes[to_route_idx].estimated_windows = to_windows;
+                            routes[to_route_idx].total_travel_time = to_cost;
+                            return true;
+                        }
+                    };
+                }
+            }
+        }
+    }
+
+    false
+}
+
+/// Run local search improvement until no more improvements or max iterations reached.
+fn local_search<'a, V, R, A>(
+    routes: &mut [RouteState<'a, V, R>],
+    service_date: i64,
+    availability: &A,
+    matrix: &[Vec<i32>],
+    index: &HashMap<String, usize>,
+    options: &SolveOptions,
+)
+where
+    V: Visit,
+    R: Visitor<Id = V::VisitorId>,
+    A: AvailabilityProvider<VisitorId = V::VisitorId>,
+{
+    for _ in 0..options.local_search_iterations {
+        let mut improved = false;
+
+        // Try 2-opt on each route
+        for route in routes.iter_mut() {
+            if two_opt_improve(
+                route,
+                service_date,
+                availability,
+                matrix,
+                index,
+                options.target_time_weight,
+            ) {
+                improved = true;
+            }
+        }
+
+        // Try relocate moves between routes
+        if relocate_improve(
+            routes,
+            service_date,
+            availability,
+            matrix,
+            index,
+            options.target_time_weight,
+        ) {
+            improved = true;
+        }
+
+        if !improved {
+            break;
+        }
+    }
 }
