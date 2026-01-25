@@ -2135,3 +2135,617 @@ fn test_no_visitors() {
     // Visit should be unassigned (no capable visitor since there are none)
     assert_eq!(result.unassigned.len(), 1);
 }
+
+#[test]
+fn test_140_visits_14_visitors() {
+    // Stress test matching user's question: 140 visits, 14 technicians
+    // Search space: 14^140 assignments × sequencing ≈ 10^250 combinations
+    let visits: Vec<TestVisit> = (0..140)
+        .map(|i| {
+            let x = (i % 14) as f64;
+            let y = (i / 14) as f64;
+            TestVisit::new(&format!("v{}", i))
+                .location(x, y)
+                .duration(15 + (i as i32 % 20)) // 15-35 min visits
+        })
+        .collect();
+
+    let visitors: Vec<TestVisitor> = (0..14)
+        .map(|i| {
+            TestVisitor::new(&format!("tech{}", i)).start_location(i as f64, 0.0)
+        })
+        .collect();
+
+    let start = std::time::Instant::now();
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(0, hours(10)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+    let elapsed = start.elapsed();
+
+    let total_assigned: usize = result.routes.iter().map(|r| r.visit_ids.len()).sum();
+    let total_travel: i32 = result.routes.iter().map(|r| r.total_travel_time).sum();
+
+    println!(
+        "140 visits, 14 techs: {} assigned in {:?}, total travel: {}s",
+        total_assigned, elapsed, total_travel
+    );
+
+    // Performance: should complete quickly (heuristic, not exhaustive)
+    assert!(
+        elapsed.as_millis() < 5000,
+        "Should complete in <5s, took {:?}",
+        elapsed
+    );
+
+    // Quality: most should be assigned
+    assert!(
+        total_assigned >= 120,
+        "At least 120 of 140 visits should be assigned, got {}",
+        total_assigned
+    );
+
+    // Distribution: work should be spread across techs
+    let max_per_tech = result.routes.iter().map(|r| r.visit_ids.len()).max().unwrap_or(0);
+    let min_per_tech = result.routes.iter().map(|r| r.visit_ids.len()).min().unwrap_or(0);
+    println!("  Distribution: min={}, max={} per tech", min_per_tech, max_per_tech);
+}
+
+#[test]
+fn test_200_visits_20_visitors_stress() {
+    // Larger stress test for bigger service companies
+    // This pushes the solver harder
+    let visits: Vec<TestVisit> = (0..200)
+        .map(|i| {
+            let x = (i % 20) as f64;
+            let y = (i / 20) as f64;
+            TestVisit::new(&format!("v{}", i))
+                .location(x, y)
+                .duration(15 + (i as i32 % 15)) // 15-30 min visits
+        })
+        .collect();
+
+    let visitors: Vec<TestVisitor> = (0..20)
+        .map(|i| {
+            TestVisitor::new(&format!("tech{}", i)).start_location(i as f64, 0.0)
+        })
+        .collect();
+
+    let start = std::time::Instant::now();
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(0, hours(10)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+    let elapsed = start.elapsed();
+
+    let total_assigned: usize = result.routes.iter().map(|r| r.visit_ids.len()).sum();
+
+    println!(
+        "200 visits, 20 techs: {} assigned in {:?}",
+        total_assigned, elapsed
+    );
+
+    // Should still complete in reasonable time
+    assert!(
+        elapsed.as_secs() < 30,
+        "Should complete in <30s, took {:?}",
+        elapsed
+    );
+
+    // Most should be assigned
+    assert!(
+        total_assigned >= 160,
+        "At least 160 of 200 visits should be assigned, got {}",
+        total_assigned
+    );
+}
+
+// ============================================================================
+// Quality Benchmarks
+// ============================================================================
+
+#[test]
+fn test_local_search_improves_solution_quality() {
+    // Compare solution quality with and without local search
+    // Local search should reduce total travel time
+    let visits: Vec<TestVisit> = (0..30)
+        .map(|i| {
+            // Deliberately scrambled positions to create suboptimal insertion order
+            let x = ((i * 7) % 10) as f64;
+            let y = ((i * 13) % 10) as f64;
+            TestVisit::new(&format!("v{}", i))
+                .location(x, y)
+                .duration(20)
+        })
+        .collect();
+
+    let visitors: Vec<TestVisitor> = (0..3)
+        .map(|i| {
+            TestVisitor::new(&format!("tech{}", i)).start_location((i * 5) as f64, 0.0)
+        })
+        .collect();
+
+    // Without local search
+    let result_no_ls = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(0, hours(10)),
+        &ManhattanMatrix,
+        SolveOptions { local_search_iterations: 0, ..Default::default() },
+    );
+
+    // With local search (default)
+    let result_with_ls = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(0, hours(10)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    let travel_no_ls: i32 = result_no_ls.routes.iter().map(|r| r.total_travel_time).sum();
+    let travel_with_ls: i32 = result_with_ls.routes.iter().map(|r| r.total_travel_time).sum();
+
+    println!(
+        "Quality benchmark: without LS = {}s, with LS = {}s, improvement = {:.1}%",
+        travel_no_ls,
+        travel_with_ls,
+        (1.0 - travel_with_ls as f64 / travel_no_ls as f64) * 100.0
+    );
+
+    // Local search should not make things worse
+    assert!(
+        travel_with_ls <= travel_no_ls,
+        "Local search should improve or maintain quality: without={}, with={}",
+        travel_no_ls, travel_with_ls
+    );
+
+    // In most cases, it should actually improve
+    // (but not guaranteed for all inputs, so we just check it's not worse)
+}
+
+#[test]
+fn test_travel_efficiency_geographic_clusters() {
+    // Verify that geographically clustered visits are assigned efficiently
+    // Techs near clusters should get those clusters' visits
+    let visits: Vec<TestVisit> = {
+        let mut v = Vec::new();
+        // Cluster A: around (0, 0)
+        for i in 0..10 {
+            v.push(TestVisit::new(&format!("a{}", i))
+                .location(i as f64 * 0.1, i as f64 * 0.1)
+                .duration(20));
+        }
+        // Cluster B: around (10, 0)
+        for i in 0..10 {
+            v.push(TestVisit::new(&format!("b{}", i))
+                .location(10.0 + i as f64 * 0.1, i as f64 * 0.1)
+                .duration(20));
+        }
+        v
+    };
+
+    let visitors = vec![
+        TestVisitor::new("tech_a").start_location(0.0, 0.0),  // Near cluster A
+        TestVisitor::new("tech_b").start_location(10.0, 0.0), // Near cluster B
+    ];
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(0, hours(10)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+
+    let tech_a_visits = get_visitor_visits(&result, "tech_a");
+    let tech_b_visits = get_visitor_visits(&result, "tech_b");
+
+    // Count how many cluster A visits went to tech A
+    let a_correct = tech_a_visits.iter().filter(|v| v.starts_with('a')).count();
+    let b_correct = tech_b_visits.iter().filter(|v| v.starts_with('b')).count();
+
+    println!(
+        "Geographic efficiency: tech_a got {}/10 cluster A visits, tech_b got {}/10 cluster B visits",
+        a_correct, b_correct
+    );
+
+    // Most visits should go to the nearby tech (at least 7/10)
+    assert!(
+        a_correct >= 7,
+        "tech_a should get most cluster A visits: got {}/10",
+        a_correct
+    );
+    assert!(
+        b_correct >= 7,
+        "tech_b should get most cluster B visits: got {}/10",
+        b_correct
+    );
+}
+
+#[test]
+fn test_solution_determinism() {
+    // Verify that the solver produces consistent results
+    // (important for debugging and predictability)
+    let visits: Vec<TestVisit> = (0..20)
+        .map(|i| {
+            TestVisit::new(&format!("v{}", i))
+                .location((i % 5) as f64, (i / 5) as f64)
+                .duration(30)
+        })
+        .collect();
+
+    let visitors: Vec<TestVisitor> = (0..3)
+        .map(|i| {
+            TestVisitor::new(&format!("tech{}", i)).start_location(i as f64, 0.0)
+        })
+        .collect();
+
+    // Run solver multiple times
+    let mut results = Vec::new();
+    for _ in 0..3 {
+        let result = solve(
+            1,
+            &visits,
+            &visitors,
+            &TestAvailability::new().default_window(0, hours(10)),
+            &ManhattanMatrix,
+            SolveOptions::default(),
+        );
+        results.push(result);
+    }
+
+    // All runs should produce same assignment
+    for i in 1..results.len() {
+        for (j, route) in results[0].routes.iter().enumerate() {
+            assert_eq!(
+                route.visit_ids, results[i].routes[j].visit_ids,
+                "Run {} produced different result than run 0 for route {}",
+                i, j
+            );
+        }
+    }
+}
+
+// ============================================================================
+// Comprehensive Real-World Scenario Tests
+// ============================================================================
+
+#[test]
+fn test_realistic_service_day() {
+    // Simulates a typical day for a service company:
+    // - 5 technicians, 40 total visits
+    // - Mix of recurring services, repairs, and quotes
+    // - Various constraints and complications
+    //
+    // This is the "integration test" that proves the solver handles
+    // real-world complexity correctly.
+
+    let mut visits = Vec::new();
+
+    // === Recurring weekly services (25 visits, predictable) ===
+    // These are the bread and butter - predictable locations, standard duration
+    for i in 0..25 {
+        let x = (i % 5) as f64 * 2.0;
+        let y = (i / 5) as f64 * 2.0;
+        visits.push(
+            TestVisit::new(&format!("recurring_{}", i))
+                .location(x, y)
+                .duration(30) // Standard 30-min service
+                .currently_assigned_to(&format!("tech{}", i % 5)) // Previous assignment
+        );
+    }
+
+    // === Repair callbacks from previous week (5 visits) ===
+    // Customer issues that need follow-up, often time-sensitive
+    for i in 0..5 {
+        visits.push(
+            TestVisit::new(&format!("repair_{}", i))
+                .location(i as f64 * 2.0 + 0.5, 3.0)
+                .duration(60) // Longer than standard
+                .committed_window(hours(8), hours(12)) // Morning required
+                .requires("repair") // Needs repair skill
+        );
+    }
+
+    // === New customer quotes (5 visits) ===
+    // Sales opportunities, flexible timing but want to impress
+    for i in 0..5 {
+        visits.push(
+            TestVisit::new(&format!("quote_{}", i))
+                .location(i as f64 * 2.0 + 1.0, 8.0)
+                .duration(45) // Quote walkthrough
+                .target_time(hours(10) + i as i32 * 3600) // Preferred times spread out
+        );
+    }
+
+    // === VIP customer with specific requirements (3 visits) ===
+    // Premium customers who always want their regular tech
+    visits.push(
+        TestVisit::new("vip_1")
+            .location(4.0, 4.0)
+            .duration(45)
+            .pinned_to_visitor("tech0")
+            .committed_window(hours(9), hours(11))
+    );
+    visits.push(
+        TestVisit::new("vip_2")
+            .location(6.0, 4.0)
+            .duration(45)
+            .pinned_to_visitor("tech1")
+            .committed_window(hours(13), hours(15))
+    );
+    visits.push(
+        TestVisit::new("vip_3")
+            .location(8.0, 4.0)
+            .duration(45)
+            .pinned_to_visitor("tech2")
+    );
+
+    // === Equipment check requiring special certification (2 visits) ===
+    visits.push(
+        TestVisit::new("certified_1")
+            .location(2.0, 6.0)
+            .duration(60)
+            .requires("certification")
+    );
+    visits.push(
+        TestVisit::new("certified_2")
+            .location(7.0, 6.0)
+            .duration(60)
+            .requires("certification")
+    );
+
+    // === Technicians with different capabilities ===
+    let visitors = vec![
+        TestVisitor::new("tech0")
+            .start_location(0.0, 0.0)
+            .capability("repair")
+            .capability("certification"), // Senior tech - all skills
+        TestVisitor::new("tech1")
+            .start_location(2.0, 0.0)
+            .capability("repair"), // Can do repairs
+        TestVisitor::new("tech2")
+            .start_location(5.0, 0.0)
+            .capability("repair")
+            .capability("certification"), // Another senior
+        TestVisitor::new("tech3")
+            .start_location(7.0, 0.0), // Junior - basic services only
+        TestVisitor::new("tech4")
+            .start_location(9.0, 0.0)
+            .capability("repair"), // Can do repairs
+    ];
+
+    // === Availability complications ===
+    // - tech3 is running 1 hour late
+    // - Everyone else normal schedule
+
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new()
+            .visitor_window("tech3", hours(9), hours(17)) // Late start
+            .default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions {
+            reassignment_penalty: 100, // Prefer stability
+            target_time_weight: 5,     // Consider target times
+            ..Default::default()
+        },
+    );
+
+    // === Verify results ===
+    let total_visits = visits.len();
+    let total_assigned: usize = result.routes.iter().map(|r| r.visit_ids.len()).sum();
+    let total_unassigned = result.unassigned.len();
+
+    println!("=== Realistic Service Day Results ===");
+    println!("Total visits: {}", total_visits);
+    println!("Assigned: {}", total_assigned);
+    println!("Unassigned: {}", total_unassigned);
+
+    for route in &result.routes {
+        println!(
+            "  {}: {} visits, {} travel time",
+            route.visitor_id.0,
+            route.visit_ids.len(),
+            route.total_travel_time
+        );
+    }
+
+    // 1. Most visits should be assigned (allow a few unassigned due to constraints)
+    assert!(
+        total_assigned >= 38,
+        "At least 38 of {} visits should be assigned, got {}",
+        total_visits, total_assigned
+    );
+
+    // 2. VIP visits must be assigned to their pinned technicians
+    let tech0_visits = get_visitor_visits(&result, "tech0");
+    let tech1_visits = get_visitor_visits(&result, "tech1");
+    let tech2_visits = get_visitor_visits(&result, "tech2");
+
+    assert!(
+        tech0_visits.contains(&"vip_1"),
+        "VIP 1 must be assigned to tech0: {:?}", tech0_visits
+    );
+    assert!(
+        tech1_visits.contains(&"vip_2"),
+        "VIP 2 must be assigned to tech1: {:?}", tech1_visits
+    );
+    assert!(
+        tech2_visits.contains(&"vip_3"),
+        "VIP 3 must be assigned to tech2: {:?}", tech2_visits
+    );
+
+    // 3. Certified visits must go to certified techs (tech0 or tech2)
+    let certified_visits: Vec<_> = result.routes.iter()
+        .filter(|r| r.visitor_id.0 == "tech0" || r.visitor_id.0 == "tech2")
+        .flat_map(|r| r.visit_ids.iter())
+        .filter(|id| id.0.starts_with("certified"))
+        .collect();
+    assert_eq!(
+        certified_visits.len(), 2,
+        "Both certified visits should go to certified techs"
+    );
+
+    // 4. Repair visits should go to repair-capable techs
+    let tech3_visits = get_visitor_visits(&result, "tech3");
+    let repair_on_tech3 = tech3_visits.iter().any(|v| v.starts_with("repair"));
+    assert!(
+        !repair_on_tech3,
+        "tech3 (no repair skill) should not have repair visits: {:?}",
+        tech3_visits
+    );
+
+    // 5. Workload should be reasonably balanced (but constraints may cause imbalance)
+    // In realistic scenarios with VIP pins and capability requirements, some imbalance is expected
+    let max_visits = result.routes.iter().map(|r| r.visit_ids.len()).max().unwrap_or(0);
+    let min_visits = result.routes.iter().map(|r| r.visit_ids.len()).min().unwrap_or(0);
+    println!("Workload: min={}, max={} (diff={})", min_visits, max_visits, max_visits - min_visits);
+    // Allow larger imbalance due to constraints, but not extreme
+    assert!(
+        max_visits - min_visits <= 12,
+        "Workload imbalance too extreme: max={}, min={}",
+        max_visits, min_visits
+    );
+
+    // 6. Check VIP committed windows are respected
+    let tech0_route = result.routes.iter().find(|r| r.visitor_id.0 == "tech0").unwrap();
+    if let Some(vip1_idx) = tech0_route.visit_ids.iter().position(|id| id.0 == "vip_1") {
+        let (start, _) = tech0_route.estimated_windows[vip1_idx];
+        assert!(
+            start >= hours(9) && start <= hours(11),
+            "VIP 1 should be scheduled 9-11am, got start={}",
+            start
+        );
+    }
+}
+
+#[test]
+fn test_worst_case_all_constraints() {
+    // Stress test: Many visits with various constraints
+    // This ensures the solver doesn't break under heavy constraint load
+
+    let mut visits = Vec::new();
+
+    // 20 visits with various constraints (avoiding impossible combinations)
+    for i in 0..20 {
+        let mut visit = TestVisit::new(&format!("v{}", i))
+            .location((i % 5) as f64, (i / 5) as f64)
+            .duration(30);
+
+        // Add various constraints based on index
+        // Only add one time constraint per visit to avoid conflicts
+        if i % 6 == 0 {
+            visit = visit.committed_window(hours(8), hours(12)); // Morning window
+        } else if i % 6 == 1 {
+            visit = visit.committed_window(hours(13), hours(17)); // Afternoon window
+        } else if i % 6 == 2 {
+            visit = visit.target_time(hours(10));
+        }
+
+        // Capability requirements (non-conflicting with pinning)
+        if i % 4 == 0 && i % 5 != 0 { // Don't add skill requirement to pinned visits
+            visit = visit.requires("skill_a");
+        }
+
+        visits.push(visit);
+    }
+
+    // Add 4 pinned visits separately (cleaner than mixing constraints)
+    visits.push(TestVisit::new("pinned_0").location(0.5, 0.5).duration(20).pinned_to_visitor("tech0"));
+    visits.push(TestVisit::new("pinned_1").location(1.5, 1.5).duration(20).pinned_to_visitor("tech0"));
+    visits.push(TestVisit::new("pinned_2").location(2.5, 2.5).duration(20).pinned_to_visitor("tech1"));
+    visits.push(TestVisit::new("pinned_3").location(3.5, 3.5).duration(20).pinned_to_visitor("tech2"));
+
+    let visitors = vec![
+        TestVisitor::new("tech0")
+            .start_location(0.0, 0.0)
+            .capability("skill_a")
+            .capability("skill_b"),
+        TestVisitor::new("tech1")
+            .start_location(2.0, 0.0)
+            .capability("skill_a"),
+        TestVisitor::new("tech2")
+            .start_location(4.0, 0.0)
+            .capability("skill_b"),
+    ];
+
+    let start = std::time::Instant::now();
+    let result = solve(
+        1,
+        &visits,
+        &visitors,
+        &TestAvailability::new().default_window(hours(8), hours(17)),
+        &ManhattanMatrix,
+        SolveOptions::default(),
+    );
+    let elapsed = start.elapsed();
+
+    let total_assigned: usize = result.routes.iter().map(|r| r.visit_ids.len()).sum();
+
+    println!(
+        "Worst case (mixed constraints): {} of 24 assigned in {:?}",
+        total_assigned, elapsed
+    );
+
+    // Should complete quickly even with all constraints
+    assert!(
+        elapsed.as_millis() < 1000,
+        "Should complete in <1s even with heavy constraints"
+    );
+
+    // Most should be assigned
+    assert!(
+        total_assigned >= 20,
+        "At least 20 of 24 should be assigned, got {}",
+        total_assigned
+    );
+
+    // Verify pinned visits are respected
+    let tech0_visits = get_visitor_visits(&result, "tech0");
+    let tech1_visits = get_visitor_visits(&result, "tech1");
+    let tech2_visits = get_visitor_visits(&result, "tech2");
+
+    println!("tech0 visits: {:?}", tech0_visits);
+    println!("tech1 visits: {:?}", tech1_visits);
+    println!("tech2 visits: {:?}", tech2_visits);
+
+    // Find where pinned visits actually went
+    for (tech, visits) in [("tech0", &tech0_visits), ("tech1", &tech1_visits), ("tech2", &tech2_visits)] {
+        for v in visits.iter().filter(|v| v.starts_with("pinned")) {
+            println!("  {} -> {}", v, tech);
+        }
+    }
+
+    assert!(tech0_visits.contains(&"pinned_0"), "pinned_0 should be with tech0: {:?}", tech0_visits);
+    assert!(tech0_visits.contains(&"pinned_1"), "pinned_1 should be with tech0: {:?}", tech0_visits);
+    assert!(tech1_visits.contains(&"pinned_2"), "pinned_2 should be with tech1: {:?}", tech1_visits);
+    assert!(tech2_visits.contains(&"pinned_3"), "pinned_3 should be with tech2: {:?}", tech2_visits);
+
+    // Verify skill requirements are respected
+    // v0, v4, v8, v12, v16 require skill_a - should NOT be with tech2 (only has skill_b)
+    let tech2_has_skill_a_visit = tech2_visits.iter()
+        .any(|v| v.starts_with('v') && {
+            let num: i32 = v[1..].parse().unwrap_or(-1);
+            num % 4 == 0 && num % 5 != 0
+        });
+    assert!(
+        !tech2_has_skill_a_visit,
+        "tech2 should not have skill_a visits: {:?}",
+        tech2_visits
+    );
+}

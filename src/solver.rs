@@ -457,8 +457,19 @@ where
         for visit_idx in 0..from_route_len {
             let visit = routes[from_route_idx].visits[visit_idx];
 
+            // Check if visit is pinned to current visitor
+            let is_pinned_to_visitor = matches!(
+                visit.pin_type(),
+                VisitPinType::Visitor | VisitPinType::VisitorAndDate
+            );
+
             // Try inserting into every route (including same route, different position)
             for to_route_idx in 0..routes.len() {
+                // Skip moving pinned visits to different routes
+                if is_pinned_to_visitor && to_route_idx != from_route_idx {
+                    continue;
+                }
+
                 let to_route_len = routes[to_route_idx].visits.len();
                 let insert_positions = if from_route_idx == to_route_idx {
                     to_route_len // same route: can insert at 0..len (excluding current position)
