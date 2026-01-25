@@ -125,8 +125,10 @@ Reference extraction guidance:
 
 ## Decision Log
 
-- Pending final decision: internal solver vs dependency.
-- If internal: define scope of constraints for v1 and expected quality bar.
+- **DECIDED**: Internal solver (Option C) - build a minimal solver inspired by vrp-core.
+- Rationale: Full control over constraints, debugging, and maintenance. ~500-2,000 LOC for v1 constraints.
+- v1 scope: pins, committed windows, availability, required capabilities (superset match), target time, stability penalty.
+- Breaks deferred to v2.
 
 ## References (Starting Point)
 

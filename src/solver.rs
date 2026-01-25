@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::traits::{AvailabilityProvider, DistanceMatrixProvider, Visit, VisitPinType, Visitor};
+use crate::traits::{AvailabilityProvider, DistanceMatrixProvider, UnassignedReason, Visit, VisitPinType, Visitor};
 
 #[derive(Debug, Clone)]
 pub struct SolveOptions {
@@ -24,9 +24,15 @@ pub struct RouteResult<VisitorId, VisitId> {
 }
 
 #[derive(Debug, Clone)]
+pub struct UnassignedVisit<VisitId> {
+    pub visit_id: VisitId,
+    pub reason: UnassignedReason,
+}
+
+#[derive(Debug, Clone)]
 pub struct PlannerResult<VisitorId, VisitId> {
     pub routes: Vec<RouteResult<VisitorId, VisitId>>,
-    pub unassigned: Vec<VisitId>,
+    pub unassigned: Vec<UnassignedVisit<VisitId>>,
 }
 
 #[derive(Debug, Clone)]
@@ -51,13 +57,14 @@ where
     A: AvailabilityProvider<VisitorId = V::VisitorId>,
     M: DistanceMatrixProvider,
 {
-    let mut unassigned: Vec<&V> = Vec::new();
+    let mut to_assign: Vec<&V> = Vec::new();
+    let mut unassigned_with_reason: Vec<(&V, UnassignedReason)> = Vec::new();
     let mut pinned_assignments: HashMap<&V::VisitorId, Vec<&V>> = HashMap::new();
 
     for visit in visits {
         if let Some(date) = visit.pinned_date() {
             if date != service_date {
-                unassigned.push(visit);
+                unassigned_with_reason.push((visit, UnassignedReason::WrongDate));
                 continue;
             }
         }
@@ -67,11 +74,11 @@ where
                 if let Some(visitor_id) = visit.pinned_visitor() {
                     pinned_assignments.entry(visitor_id).or_default().push(visit);
                 } else {
-                    unassigned.push(visit);
+                    unassigned_with_reason.push((visit, UnassignedReason::MissingPinnedVisitor));
                 }
             }
             VisitPinType::Date | VisitPinType::None => {
-                unassigned.push(visit);
+                to_assign.push(visit);
             }
         }
     }
@@ -99,15 +106,18 @@ where
                 route.estimated_windows = schedule.0;
                 route.total_travel_time = schedule.1;
             } else {
-                unassigned.extend(route.visits.drain(..));
+                for visit in route.visits.drain(..) {
+                    unassigned_with_reason.push((visit, UnassignedReason::NoFeasibleWindow));
+                }
             }
         }
 
         routes.push(route);
     }
 
-    for visit in unassigned.clone() {
+    for visit in to_assign {
         if !visit_is_compatible(visit, visitors) {
+            unassigned_with_reason.push((visit, UnassignedReason::NoCapableVisitor));
             continue;
         }
 
@@ -153,20 +163,8 @@ where
                 route.estimated_windows = windows;
                 route.total_travel_time = cost;
             }
-        }
-    }
-
-    let mut assigned_ids: Vec<V::Id> = Vec::new();
-    for route in &routes {
-        for visit in &route.visits {
-            assigned_ids.push(visit.id().clone());
-        }
-    }
-
-    let mut unassigned_ids: Vec<V::Id> = Vec::new();
-    for visit in visits {
-        if !assigned_ids.contains(visit.id()) {
-            unassigned_ids.push(visit.id().clone());
+        } else {
+            unassigned_with_reason.push((visit, UnassignedReason::NoFeasibleWindow));
         }
     }
 
@@ -180,10 +178,15 @@ where
         })
         .collect();
 
-    PlannerResult {
-        routes,
-        unassigned: unassigned_ids,
-    }
+    let unassigned = unassigned_with_reason
+        .into_iter()
+        .map(|(visit, reason)| UnassignedVisit {
+            visit_id: visit.id().clone(),
+            reason,
+        })
+        .collect();
+
+    PlannerResult { routes, unassigned }
 }
 
 fn visit_is_compatible<V, R>(visit: &V, visitors: &[R]) -> bool

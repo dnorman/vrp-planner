@@ -39,10 +39,18 @@ pub trait Visit {
     fn pinned_date(&self) -> Option<i64>;
 
     /// Required capability identifiers for this visit.
+    /// Visitor must have ALL of these (superset match).
     fn required_capabilities(&self) -> &[String];
 
     /// Location coordinates (lat, lng).
     fn location(&self) -> (f64, f64);
+
+    /// Current visitor assignment (for stability penalty).
+    /// If the visit is currently assigned to a visitor, reassigning it
+    /// to a different visitor incurs a soft penalty.
+    fn current_visitor_id(&self) -> Option<&Self::VisitorId> {
+        None
+    }
 }
 
 /// The worker/vehicle that performs visits.
@@ -92,4 +100,17 @@ pub enum VisitPinType {
     Visitor,
     Date,
     VisitorAndDate,
+}
+
+/// Reason why a visit could not be assigned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnassignedReason {
+    /// Visit is pinned to a date that doesn't match the service date.
+    WrongDate,
+    /// Visit is pinned to a visitor but no pinned_visitor was provided.
+    MissingPinnedVisitor,
+    /// No visitor has the required capabilities.
+    NoCapableVisitor,
+    /// No feasible time window could be found (availability or committed window conflict).
+    NoFeasibleWindow,
 }

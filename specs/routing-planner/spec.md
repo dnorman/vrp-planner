@@ -6,18 +6,20 @@ Build a small, deterministic VRP engine that assigns Visits to RoutePlans and se
 
 ## Scope
 
-In scope:
-- Single-day planning (multi-day out of scope for v1).
+In scope (v1):
+- Single-day planning.
 - Multiple visitors/vehicles with individual availability windows.
 - Hard constraints: pins, committed windows, availability, required capabilities.
-- Soft constraints: target time, keep-same-visitor preference, workload balance.
-- Distance model progression: OSRM matrix by default; Haversine fallback only if OSRM is unavailable.
+- Soft constraints: target time, keep-same-visitor preference (stability), workload balance.
+- Distance model: OSRM matrix by default; Haversine fallback only if OSRM is unavailable.
+- Capability matching: visitor must have ALL required capabilities (superset match).
 
 Out of scope (v1):
 - Real-time reoptimization during the day.
 - Dynamic orders arriving mid-route.
 - Multi-depot fleet mixing.
-- Capacities (optional v2).
+- Capacities (v2).
+- Break handling (v2 - fixed duration, flexible start within a window).
 
 ## Ontology
 
@@ -75,12 +77,26 @@ Clusters are **seed-only**; inter-route moves may cross cluster boundaries.
 - Time budget: 10s per run (configurable; allow 5–10s).
 - Cost units: OSRM travel time in seconds (primary), distance is secondary metric.
 - OSRM endpoint: `table` only for planning.
-- Stability: soft penalty (do not hard-freeze assignments except for pins).
-- Breaks: fixed duration, flexible start within a window.
- - Adaptive thresholds: optionally adjust `N_small`/`N_medium` based on observed runtime to stay within the time budget.
+- Adaptive thresholds: optionally adjust `N_small`/`N_medium` based on observed runtime to stay within the time budget.
+
+## Cost Weights (Defaults)
+
+These are initial values; tune based on real-world feedback.
+
+| Component | Weight | Notes |
+|-----------|--------|-------|
+| Travel time | 1.0 | Primary objective (seconds) |
+| Target time deviation | 0.5 | Penalty per second of deviation from target |
+| Reassignment penalty | 300 | Penalty for changing visitor (stability) |
+| Workload imbalance | 0.3 | Penalty for uneven distribution (v2) |
+
+## Stability
+
+- Visits track their current visitor assignment via `current_visitor_id()`.
+- Reassigning a visit to a different visitor incurs a soft penalty.
+- Pins are hard constraints and override stability preferences.
 
 ## Open Questions
 
-- Thresholds for switching from full-matrix OSRM to clustered approximation.
-- How to model stability penalties (avoid reshuffling already accepted plans).
-- Initial objective weights for balancing cost vs. SLA compliance.
+- Thresholds for switching from full-matrix OSRM to clustered approximation (needs benchmarking).
+- Workload balance metric definition (total time? visit count?).
