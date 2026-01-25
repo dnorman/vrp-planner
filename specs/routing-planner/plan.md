@@ -2,9 +2,10 @@
 
 ## Phase 1: Ontology + Data Model
 
-- Define core domain types (job, route plan, vehicle/worker, availability).
+- Define core domain types (visit, route plan, visitor, availability).
 - Ensure job supports committed window, target time, estimated window.
 - Add pin fields and enums to represent worker/date pinning.
+- Introduce FieldOffice region mapping for OSRM dataset selection.
 
 ## Phase 2: Solver Strategy Decision
 
@@ -17,12 +18,14 @@
 - Define planner interface inputs/outputs (data structs).
 - Build a unit-test suite with fixture problems.
 - Mock availability service.
+- Validate OSRM sidecar integration via testcontainers.
 
 ## Phase 4: Implementation
 
 - Implement planner pipeline.
 - Persist RoutePlans and job assignments.
 - Store RouteOptimizationRun metadata.
+- Auto-provision OSRM datasets (download + preprocess) per FieldOffice.
 
 ## Phase 5: UI Integration (Later)
 

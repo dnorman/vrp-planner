@@ -2,12 +2,13 @@
 
 ## Goal
 
-Define a distance/time matrix strategy that scales from Haversine to OSRM.
+Define a distance/time matrix strategy that defaults to OSRM (MLD) with optional Haversine fallback.
 
 ## Deliverables
 
 - Matrix provider interface.
-- OSRM HTTP integration plan (default).
+- OSRM HTTP integration plan (default, MLD).
+- OSRM dataset provisioning strategy (auto-download + preprocess).
 - Haversine reference implementation (fallback).
 - Matrix caching strategy.
 
@@ -15,6 +16,7 @@ Define a distance/time matrix strategy that scales from Haversine to OSRM.
 
 1. Define matrix provider API (inputs/outputs, units).
 2. Document OSRM sidecar setup and API calls.
-3. Implement Haversine matrix generator (fallback).
-4. Define caching policy (per planning run or per day).
-5. Clarify OSRM `table` endpoint usage for planning.
+3. Define dataset lifecycle (Geofabrik region selection, cache root).
+4. Implement Haversine matrix generator (fallback).
+5. Define caching policy (per planning run or per day).
+6. Clarify OSRM `table` endpoint usage for planning.

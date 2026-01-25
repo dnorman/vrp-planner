@@ -2,15 +2,17 @@
 
 ## Immediate
 
-- [ ] Define core domain types (job, route plan, vehicle/worker, availability).
-- [ ] Define pin enum + fields (worker/date/both).
-- [ ] Confirm committed vs target vs estimated time window fields.
+- [x] Define core domain types (visit, route plan, visitor, availability).
+- [x] Define pin enum + fields (visitor/date/both).
+- [x] Confirm committed vs target time window fields.
+- [ ] Define estimated window output schema.
+- [ ] Define FieldOffice region mapping for OSRM dataset selection.
 
 ## Research
 
 - [ ] Finalize solver approach (internal vs vendor).
 - [ ] Review vrp-core algorithms to scope minimal internal solver.
-- [ ] Define distance model progression (Haversine -> OSRM matrix).
+- [x] Define distance model progression (OSRM-first with optional Haversine fallback).
 
 ## Tests
 
@@ -18,12 +20,15 @@
 - [ ] Add tests for pinned worker/date, committed window, target time.
 - [ ] Mock availability service responses.
 - [ ] Add benchmark cases comparing Haversine vs map-based matrix.
+- [x] Add OSRM sidecar integration test (MLD).
 
 ## Implementation
 
 - [ ] RoutePlan creation flow (lazy creation on optimization runs).
 - [ ] Assignment + sequencing persistence.
 - [ ] RouteOptimizationRun metrics and error handling.
+- [x] Add OSRM HTTP client adapter.
+- [x] Auto-provision OSRM datasets (download + preprocess).
 
 ## UI (Later)
 
