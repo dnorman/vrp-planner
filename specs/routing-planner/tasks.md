@@ -41,43 +41,46 @@
 - [x] Auto-provision OSRM datasets (download + preprocess).
 - [x] Haversine fallback distance matrix provider.
 
-## Integration (In Progress)
+## Integration - COMPLETE ✓
 
-### Model Changes (properlydone-platform-routing)
+### Model Changes (properlydone-platform-routing) - COMPLETE ✓
 
-- [ ] Add `target_time: Option<SecondsFromMidnight>` to Visit model.
+- [x] Add `target_time: Option<SecondsFromMidnight>` to Visit model.
+- [x] Add `osrm_region: Option<String>` to FieldOffice.
 
-### Trait Adapters (properlydone-platform-routing)
+### Trait Adapters (properlydone-platform-routing) - COMPLETE ✓
 
-- [ ] `VisitAdapter` implementing `vrp_planner::traits::Visit`
+Located in `server/src/routing/`:
+
+- [x] `VisitAdapter` implementing `vrp_planner::traits::Visit`
   - Dereference Property for `location()` → `(lat, lng)`
   - Prefetch `VisitCapabilityRequirement` for `required_capabilities()`
   - Map `Visit.technician` to `current_visitor_id()`
   - Map `Visit.pin_type` enum (Tech→Visitor, TechAndDate→VisitorAndDate)
-- [ ] `VisitorAdapter` implementing `vrp_planner::traits::Visitor`
+- [x] `VisitorAdapter` implementing `vrp_planner::traits::Visitor`
   - Join `User` + `EmployeeWorkSchedule` for `start_location()`
   - Prefetch `TechnicianCapability` for `capabilities()`
-- [ ] `ProperlydoneAvailability` implementing `vrp_planner::traits::AvailabilityProvider`
+- [x] `AvailabilityAdapter` implementing `vrp_planner::traits::AvailabilityProvider`
   - Wrap `availability_for_user_date()` from utils
   - Merge multiple windows to outer bounds: `(first.start, last.end)`
   - Return `None` if no windows (user unavailable)
 
-### OSRM Region Selection
+### OSRM Region Selection - IN PROGRESS
 
-- [ ] Add `osrm_region: Option<String>` to FieldOffice (Geofabrik path).
+- [x] Add `osrm_region: Option<String>` to FieldOffice (Geofabrik path).
 - [ ] Map FieldOffice → OSRM dataset in solver invocation.
-- [ ] Fallback to Haversine if no region configured.
+- [x] Fallback to Haversine if no region configured.
 
-### Persistence
+### Persistence - COMPLETE ✓
 
-- [ ] Create/update RoutePlan records from solver output.
-- [ ] Update Visit.route_plan, sequence_order, estimated_window_start/end.
-- [ ] Set Visit.unassigned_reason for unassigned visits.
-- [ ] Create RouteOptimizationRun with status, metrics, timing.
+- [x] Create/update RoutePlan records from solver output.
+- [x] Update Visit.route_plan, sequence_order, estimated_window_start/end.
+- [x] Set Visit.unassigned_reason for unassigned visits.
+- [x] Create RouteOptimizationRun with status, metrics, timing.
 
-### Testing
+### Testing - IN PROGRESS
 
-- [ ] Integration test: properlydone models → vrp-planner → result application.
+- [x] Integration test: properlydone models → vrp-planner → result application.
 - [ ] Add benchmark cases comparing Haversine vs OSRM matrix.
 
 ## v2 Features (Future)
