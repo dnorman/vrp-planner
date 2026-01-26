@@ -39,12 +39,39 @@
 - [x] Pinned visit protection in local search (bug fix).
 - Persistence deferred to integration phase.
 
-## Phase 5: Integration (Future)
+## Phase 5: Integration (In Progress)
 
-- Implement adapters in properlydone-platform.
-- FieldOffice region mapping for OSRM dataset selection.
-- Persist RoutePlans and assignments.
-- Store RouteOptimizationRun metadata.
+Integration with properlydone-platform-routing. See `properlydone-platform-routing/specs/architecture/integrations/route-optimization.md` for implementation details.
+
+### Trait Adapters Required
+
+| Trait | properlydone Source | Adapter Notes |
+|-------|---------------------|---------------|
+| `Visit` | `Visit` model | Dereference Property for location, prefetch capabilities |
+| `Visitor` | `User` + `EmployeeWorkSchedule` | Join for start location, prefetch capabilities |
+| `AvailabilityProvider` | `availability_for_user_date()` | Wrap overlay service, merge windows to single span |
+| `DistanceMatrixProvider` | vrp-planner OSRM/Haversine | Select region via FieldOffice |
+
+### Known Gaps to Address
+
+| Gap | Resolution | Owner |
+|-----|------------|-------|
+| `target_time` field missing on Visit | Add `target_time: Option<SecondsFromMidnight>` to model | properlydone |
+| Multiple availability windows | Return outer bounds `(first.start, last.end)` until Phase 6 | adapter |
+| Capabilities as `&[String]` | Prefetch and denormalize in adapter | adapter |
+| Location via Property traversal | Dereference in adapter, cache coordinates | adapter |
+| FieldOffice → OSRM region | Map FieldOffice to Geofabrik region path | adapter |
+
+### Integration Tasks
+
+- [ ] Add `target_time` field to Visit model (properlydone).
+- [ ] Implement `VisitAdapter` struct implementing `Visit` trait.
+- [ ] Implement `VisitorAdapter` struct implementing `Visitor` trait.
+- [ ] Implement `ProperlydoneAvailability` implementing `AvailabilityProvider`.
+- [ ] Add FieldOffice → Geofabrik region mapping.
+- [ ] Create integration test with real properlydone models.
+- [ ] Wire up RouteOptimizationRun persistence.
+- [ ] Apply solver results to Visit records (route_plan, sequence_order, estimated_window_*).
 
 ## Phase 6: v2 Features (Future)
 

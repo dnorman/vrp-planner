@@ -41,13 +41,44 @@
 - [x] Auto-provision OSRM datasets (download + preprocess).
 - [x] Haversine fallback distance matrix provider.
 
-## Integration (Future)
+## Integration (In Progress)
 
-- [ ] RoutePlan creation flow (lazy creation on optimization runs).
-- [ ] Assignment + sequencing persistence.
-- [ ] RouteOptimizationRun metrics and error handling.
-- [ ] Implement adapters in properlydone-platform.
-- [ ] FieldOffice region mapping for OSRM dataset selection.
+### Model Changes (properlydone-platform-routing)
+
+- [ ] Add `target_time: Option<SecondsFromMidnight>` to Visit model.
+
+### Trait Adapters (properlydone-platform-routing)
+
+- [ ] `VisitAdapter` implementing `vrp_planner::traits::Visit`
+  - Dereference Property for `location()` → `(lat, lng)`
+  - Prefetch `VisitCapabilityRequirement` for `required_capabilities()`
+  - Map `Visit.technician` to `current_visitor_id()`
+  - Map `Visit.pin_type` enum (Tech→Visitor, TechAndDate→VisitorAndDate)
+- [ ] `VisitorAdapter` implementing `vrp_planner::traits::Visitor`
+  - Join `User` + `EmployeeWorkSchedule` for `start_location()`
+  - Prefetch `TechnicianCapability` for `capabilities()`
+- [ ] `ProperlydoneAvailability` implementing `vrp_planner::traits::AvailabilityProvider`
+  - Wrap `availability_for_user_date()` from utils
+  - Merge multiple windows to outer bounds: `(first.start, last.end)`
+  - Return `None` if no windows (user unavailable)
+
+### OSRM Region Selection
+
+- [ ] Add `osrm_region: Option<String>` to FieldOffice (Geofabrik path).
+- [ ] Map FieldOffice → OSRM dataset in solver invocation.
+- [ ] Fallback to Haversine if no region configured.
+
+### Persistence
+
+- [ ] Create/update RoutePlan records from solver output.
+- [ ] Update Visit.route_plan, sequence_order, estimated_window_start/end.
+- [ ] Set Visit.unassigned_reason for unassigned visits.
+- [ ] Create RouteOptimizationRun with status, metrics, timing.
+
+### Testing
+
+- [ ] Integration test: properlydone models → vrp-planner → result application.
+- [ ] Add benchmark cases comparing Haversine vs OSRM matrix.
 
 ## v2 Features (Future)
 
