@@ -20,8 +20,12 @@ This document outlines all scenarios a service company might encounter that the 
 | Quality Benchmarks | 3 | ✓ |
 | Scale / Stress | 4 | ✓ |
 | Composite Scenarios | 2 | ✓ |
+| OSRM Integration | 4 | ✓ |
+| Smoke Tests | 1 | ✓ |
+| Haversine Unit Tests | 5 | ✓ |
+| Fixture Validation | 2 | ✓ |
 
-**Total: 58 tests passing**
+**Total: 70 tests passing**
 
 ---
 
@@ -180,6 +184,44 @@ This document outlines all scenarios a service company might encounter that the 
 ### Working Hours Limits
 - [ ] `test_max_hours_per_day` - Tech has hour limit (e.g., 8 hours)
 - [ ] `test_overtime_avoidance` - Prefer not to exceed standard hours
+
+---
+
+## 15. OSRM Integration Tests
+
+Tests that validate the full pipeline with real-world coordinates and actual road network routing via OSRM.
+
+- [x] `osrm_table_returns_matrix` - OSRM table endpoint returns valid distance matrix
+- [x] `test_small_route_with_osrm` - 6 visits with real Las Vegas coordinates via OSRM
+- [x] `test_medium_route_with_osrm` - 20 visits across 3 technicians with OSRM routing
+- [x] `test_time_windows_with_osrm` - Committed windows validated with real road travel times
+
+---
+
+## 16. Smoke Tests
+
+- [x] `honors_pinned_visitor` - Basic smoke test for pinned visitor functionality
+
+---
+
+## 17. Haversine Unit Tests
+
+Unit tests for the Haversine fallback distance matrix provider.
+
+- [x] `test_haversine_same_point` - Same point returns ~0 distance
+- [x] `test_haversine_known_distance` - Las Vegas to LA returns ~370km
+- [x] `test_matrix_diagonal_is_zero` - Diagonal of matrix is zero
+- [x] `test_matrix_symmetric` - Matrix is symmetric
+- [x] `test_reasonable_travel_time` - 10km at 40km/h = 900 seconds
+
+---
+
+## 18. Fixture Validation Tests
+
+Tests that validate test fixtures are correctly set up.
+
+- [x] `test_all_locations_count` - Las Vegas fixture has expected location count
+- [x] `test_coordinates_in_vegas_area` - All coordinates are within Las Vegas bounds
 
 ---
 

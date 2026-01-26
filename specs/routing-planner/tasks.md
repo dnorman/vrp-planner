@@ -26,6 +26,7 @@
 - [x] Add quality benchmarks (local search improvement, geographic efficiency).
 - [x] Add composite real-world scenario tests.
 - [x] Add OSRM sidecar integration test (MLD).
+- [x] Add realistic routing tests with Las Vegas coordinates via OSRM (3 tests).
 - [ ] Add benchmark cases comparing Haversine vs map-based matrix.
 
 ## Implementation - COMPLETE ✓

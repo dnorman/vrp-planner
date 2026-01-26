@@ -19,7 +19,7 @@
 
 - [x] Define planner interface inputs/outputs (data structs).
 - [x] Validate OSRM sidecar integration via testcontainers.
-- [x] Build comprehensive test suite (58 tests).
+- [x] Build comprehensive test suite (70 tests including OSRM integration and unit tests).
 - [x] Add tests for stability, capabilities, windows, pinning.
 - [x] Mock availability service.
 - [x] Add scale tests (50/100/140/200 visits).
