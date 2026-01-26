@@ -261,10 +261,16 @@ where
     R: Visitor<Id = V::VisitorId>,
     A: AvailabilityProvider<VisitorId = V::VisitorId>,
 {
-    let availability_window = availability.availability_for(route.visitor.id(), service_date)?;
-    let mut time = availability_window.0;
+    let availability_windows = availability.availability_for(route.visitor.id(), service_date)?;
+    if availability_windows.is_empty() {
+        return None;
+    }
+
+    // Start at the beginning of the first availability window
+    let mut time = availability_windows[0].0;
+    let mut current_window_idx = 0;
     let mut total_cost = 0;
-    let mut windows = Vec::with_capacity(route.visits.len());
+    let mut result_windows = Vec::with_capacity(route.visits.len());
 
     let mut prev_location = route
         .visitor
@@ -276,22 +282,29 @@ where
         time += travel;
         total_cost += travel;
 
-        if let Some((window_start, window_end)) = visit.committed_window() {
-            if time < window_start {
-                time = window_start;
+        let duration_secs = visit.estimated_duration_minutes() * 60;
+
+        // Handle committed window constraints
+        if let Some((committed_start, committed_end)) = visit.committed_window() {
+            if time < committed_start {
+                time = committed_start;
             }
-            if time > window_end {
+            if time > committed_end {
                 return None;
             }
         }
 
-        let start_time = time;
-        let duration_secs = visit.estimated_duration_minutes() * 60;
-        time += duration_secs;
+        // Find a window where the visit fits entirely
+        let (start_time, window_idx) = find_fitting_window(
+            time,
+            duration_secs,
+            current_window_idx,
+            &availability_windows,
+            visit.committed_window(),
+        )?;
 
-        if time > availability_window.1 {
-            return None;
-        }
+        time = start_time + duration_secs;
+        current_window_idx = window_idx;
 
         // Target time penalty
         if let Some(target) = visit.target_time() {
@@ -305,11 +318,55 @@ where
             }
         }
 
-        windows.push((start_time, start_time + duration_secs));
+        result_windows.push((start_time, start_time + duration_secs));
         prev_location = visit.location();
     }
 
-    Some((windows, total_cost))
+    Some((result_windows, total_cost))
+}
+
+/// Find the earliest window where a visit can fit entirely.
+///
+/// Returns the start time and window index if found.
+fn find_fitting_window(
+    earliest_start: i32,
+    duration: i32,
+    current_window_idx: usize,
+    windows: &[(i32, i32)],
+    committed_window: Option<(i32, i32)>,
+) -> Option<(i32, usize)> {
+    for (idx, &(window_start, window_end)) in windows.iter().enumerate().skip(current_window_idx) {
+        // Determine the earliest we can start in this window
+        let start_in_window = earliest_start.max(window_start);
+
+        // Check committed window constraints
+        if let Some((committed_start, committed_end)) = committed_window {
+            // If committed window ends before this availability window starts, no fit
+            if committed_end < window_start {
+                return None;
+            }
+            // If committed window starts after this availability window ends, try next
+            if committed_start > window_end {
+                continue;
+            }
+            // Adjust start time for committed window
+            let adjusted_start = start_in_window.max(committed_start);
+            let end_time = adjusted_start + duration;
+
+            // Check if it fits in both the availability window and committed window
+            if end_time <= window_end && adjusted_start <= committed_end && end_time <= committed_end {
+                return Some((adjusted_start, idx));
+            }
+        } else {
+            // No committed window, just check availability
+            let end_time = start_in_window + duration;
+            if end_time <= window_end {
+                return Some((start_in_window, idx));
+            }
+        }
+    }
+
+    None
 }
 
 fn travel_time(

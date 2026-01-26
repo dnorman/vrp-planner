@@ -79,11 +79,22 @@ pub trait RoutePlan {
     fn service_date(&self) -> i64;
 }
 
-/// Provides availability (start/end) for a visitor on a given date.
+/// A time window (start, end) in seconds from midnight.
+pub type TimeWindow = (i32, i32);
+
+/// Provides availability windows for a visitor on a given date.
+///
+/// Returns multiple windows to support breaks (e.g., lunch breaks).
+/// Windows should be non-overlapping and sorted by start time.
 pub trait AvailabilityProvider {
     type VisitorId: Id;
 
-    fn availability_for(&self, visitor_id: &Self::VisitorId, date: i64) -> Option<(i32, i32)>;
+    /// Returns availability windows for a visitor on a given date.
+    ///
+    /// Returns `None` if the visitor is completely unavailable.
+    /// Returns `Some(vec![])` should not happen - use `None` instead.
+    /// Example: `Some(vec![(8*3600, 12*3600), (13*3600, 17*3600)])` for 8am-12pm and 1pm-5pm.
+    fn availability_for(&self, visitor_id: &Self::VisitorId, date: i64) -> Option<Vec<TimeWindow>>;
 }
 
 /// Provides a distance/time matrix for a set of locations.
