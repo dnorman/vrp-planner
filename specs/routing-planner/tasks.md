@@ -65,10 +65,10 @@ Located in `server/src/routing/`:
   - Merge multiple windows to outer bounds: `(first.start, last.end)`
   - Return `None` if no windows (user unavailable)
 
-### OSRM Region Selection - IN PROGRESS
+### OSRM Region Selection - COMPLETE ✓
 
 - [x] Add `osrm_region: Option<String>` to FieldOffice (Geofabrik path).
-- [ ] Map FieldOffice → OSRM dataset in solver invocation.
+- [x] Map FieldOffice → OSRM dataset in solver invocation.
 - [x] Fallback to Haversine if no region configured.
 
 ### Persistence - COMPLETE ✓
@@ -83,11 +83,16 @@ Located in `server/src/routing/`:
 - [x] Integration test: properlydone models → vrp-planner → result application.
 - [ ] Add benchmark cases comparing Haversine vs OSRM matrix.
 
+### Break Handling - COMPLETE ✓
+
+- [x] AvailabilityProvider returns multiple windows (Vec<TimeWindow>)
+- [x] Solver handles breaks: visits scheduled into fitting windows
+- [x] Integration test verifying lunch break scheduling
+
 ## v2 Features (Future)
 
 - [ ] Priority/urgency handling for emergency visits.
 - [ ] VIP customer preferred scheduling.
-- [ ] Break handling (lunch breaks, mid-day unavailability).
 - [ ] Working hours limits (max hours per day, overtime avoidance).
 
 ## UI (Later)
