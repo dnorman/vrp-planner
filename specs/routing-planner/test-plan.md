@@ -35,14 +35,14 @@ This document outlines all scenarios a service company might encounter that the 
 |----------|-------|--------|
 | Platform E2E | 9 | ✓ |
 | Recalculation Tests | 7 | ✓ |
-| Watcher Integration | 5 | Planned |
-| Day-of-Service E2E | 5 | Planned |
+| Watcher Integration | 5 | ✓ |
+| Day-of-Service E2E | 5 | ✓ |
 
-**Platform Total: 16 passing, 10 planned**
+**Platform Total: 26 tests passing**
 
 ---
 
-**Combined: 86 tests (70 solver + 16 platform)**
+**Combined: 96 tests (70 solver + 26 platform)**
 
 ---
 
@@ -278,21 +278,21 @@ Tests for `services/route-planner` crate.
 - [x] `test_apply_recalculated_etas` - Updated windows persisted to database
 - [x] `test_recalc_multiple_completed` - Handles several done visits
 
-#### Watcher Integration Tests
+#### Watcher Integration Tests - COMPLETE ✓
 
-- [ ] `test_watcher_triggers_on_status_change_to_inprogress` - Recalc when tech arrives
-- [ ] `test_watcher_triggers_on_status_change_to_completed` - Recalc when visit done
-- [ ] `test_watcher_triggers_on_status_change_to_skipped` - Recalc when skipped
-- [ ] `test_watcher_ignores_scheduled_visits` - No recalc for scheduled visits
-- [ ] `test_watcher_ignores_visits_without_route_plan` - No recalc for unassigned
+- [x] `test_watcher_triggers_on_status_change_to_inprogress` - Fires when tech arrives
+- [x] `test_watcher_triggers_on_status_change_to_completed` - Fires when visit done
+- [x] `test_watcher_triggers_on_status_change_to_skipped` - Fires when skipped
+- [x] `test_watcher_ignores_scheduled_property_updates` - Property updates don't require recalc
+- [x] `test_watcher_handles_visits_without_route_plan` - Graceful handling of unassigned
 
-#### End-to-End Day-of-Service Scenarios
+#### End-to-End Day-of-Service Scenarios - COMPLETE ✓
 
-- [ ] `test_e2e_tech_running_late_all_day` - ETAs cascade for entire route
-- [ ] `test_e2e_tech_catches_up_after_short_visit` - Delay recovery tracked
-- [ ] `test_e2e_multiple_techs_running_concurrently` - Parallel recalculations
-- [ ] `test_e2e_mixed_status_transitions` - Complex sequence of status changes
-- [ ] `test_e2e_commitment_notification_created` - Dispatcher notified of violations
+- [x] `test_e2e_tech_running_late_all_day` - Cumulative delays cascade through route
+- [x] `test_e2e_tech_catches_up_after_short_visit` - Delay recovery tracked
+- [x] `test_e2e_multiple_techs_running_concurrently` - Independent recalculations
+- [x] `test_e2e_mixed_status_transitions` - Complex sequence of status changes
+- [x] `test_e2e_commitment_violation_details` - Violation flagging with details
 
 ---
 
