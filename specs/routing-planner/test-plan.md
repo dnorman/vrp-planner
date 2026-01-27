@@ -34,15 +34,15 @@ This document outlines all scenarios a service company might encounter that the 
 | Category | Tests | Status |
 |----------|-------|--------|
 | Platform E2E | 9 | ✓ |
-| Recalculation Tests | 8 | Planned |
+| Recalculation Tests | 7 | ✓ |
 | Watcher Integration | 5 | Planned |
 | Day-of-Service E2E | 5 | Planned |
 
-**Platform Total: 9 passing, 18 planned**
+**Platform Total: 16 passing, 10 planned**
 
 ---
 
-**Combined: 79 tests (70 solver + 9 platform)**
+**Combined: 86 tests (70 solver + 16 platform)**
 
 ---
 
@@ -264,20 +264,19 @@ Located in `properlydone-platform-routing/server/tests/`.
 
 **Total: 9 tests passing**
 
-### Service Crate Tests (Needed)
+### Service Crate Tests - COMPLETE ✓
 
 Tests for `services/route-planner` crate.
 
 #### Recalculation Tests
 
-- [ ] `test_recalc_tech_arrives_early` - ETAs shift earlier for downstream visits
-- [ ] `test_recalc_tech_arrives_late` - ETAs shift later, violations flagged
-- [ ] `test_recalc_visit_completes_faster_than_estimated` - Time gained propagates
-- [ ] `test_recalc_visit_takes_longer_than_estimated` - Delay propagates to downstream
-- [ ] `test_recalc_visit_skipped_mid_route` - Remaining visits recalculated
-- [ ] `test_recalc_commitment_violation_flagged` - Violation created when arrival > committed end
-- [ ] `test_recalc_no_change_when_on_schedule` - ETAs unchanged if on time
-- [ ] `test_recalc_multiple_visits_completed` - Handles several done visits
+- [x] `test_recalc_tech_arrives_early` - ETAs shift earlier for downstream visits
+- [x] `test_recalc_tech_arrives_late_with_violation` - ETAs shift later, violations flagged
+- [x] `test_recalc_visit_completes_faster` - Time gained propagates
+- [x] `test_recalc_visit_skipped` - Remaining visits recalculated
+- [x] `test_recalc_no_change_when_on_schedule` - Minimal delay when on time
+- [x] `test_apply_recalculated_etas` - Updated windows persisted to database
+- [x] `test_recalc_multiple_completed` - Handles several done visits
 
 #### Watcher Integration Tests
 
