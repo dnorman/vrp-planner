@@ -4,6 +4,8 @@ This document outlines all scenarios a service company might encounter that the 
 
 ## Test Coverage Summary
 
+### vrp-planner (Solver)
+
 | Category | Tests | Status |
 |----------|-------|--------|
 | Basic Assignment | 6 | ✓ |
@@ -25,7 +27,22 @@ This document outlines all scenarios a service company might encounter that the 
 | Haversine Unit Tests | 5 | ✓ |
 | Fixture Validation | 2 | ✓ |
 
-**Total: 70 tests passing**
+**vrp-planner Total: 70 tests**
+
+### properlydone-platform-routing (E2E)
+
+| Category | Tests | Status |
+|----------|-------|--------|
+| Platform E2E | 9 | ✓ |
+| Recalculation Tests | 8 | Planned |
+| Watcher Integration | 5 | Planned |
+| Day-of-Service E2E | 5 | Planned |
+
+**Platform Total: 9 passing, 18 planned**
+
+---
+
+**Combined: 79 tests (70 solver + 9 platform)**
 
 ---
 
@@ -177,9 +194,9 @@ This document outlines all scenarios a service company might encounter that the 
 - [ ] `test_vip_preferred_time` - VIP gets requested time slot
 - [ ] `test_vip_never_unassigned` - VIP visits assigned even if suboptimal
 
-### Break Handling
-- [ ] `test_lunch_break_respected` - No visits scheduled during break
-- [ ] `test_break_splits_route` - Route accounts for mid-day break
+### Break Handling - COMPLETE ✓
+- [x] `test_route_optimization_with_break` - Lunch breaks handled correctly (in platform E2E tests)
+- Multiple availability windows supported via `Vec<TimeWindow>`
 
 ### Working Hours Limits
 - [ ] `test_max_hours_per_day` - Tech has hour limit (e.g., 8 hours)
@@ -222,6 +239,61 @@ Tests that validate test fixtures are correctly set up.
 
 - [x] `test_all_locations_count` - Las Vegas fixture has expected location count
 - [x] `test_coordinates_in_vegas_area` - All coordinates are within Las Vegas bounds
+
+---
+
+---
+
+## 19. Platform E2E Tests (properlydone-platform-routing)
+
+End-to-end tests that exercise the full integration with ankurah database, adapters, and result persistence.
+
+Located in `properlydone-platform-routing/server/tests/`.
+
+### Existing Tests
+
+- [x] `test_route_optimization_basic` - Basic optimization with ankurah context
+- [x] `test_route_optimization_with_capabilities` - Capability matching persisted correctly
+- [x] `test_route_optimization_with_committed_windows` - Time windows respected
+- [x] `test_route_optimization_with_pinning` - Pinned visits assigned correctly
+- [x] `test_route_optimization_unassigned_reasons` - Unassigned reasons persisted
+- [x] `test_route_optimization_creates_route_plan` - RoutePlan records created
+- [x] `test_visit_status_transitions_for_recalculation` - Status change triggers recalc
+- [x] `test_route_optimization_with_availability` - Availability windows respected
+- [x] `test_route_optimization_with_break` - Lunch breaks handled correctly
+
+**Total: 9 tests passing**
+
+### Service Crate Tests (Needed)
+
+Tests for `services/route-planner` crate.
+
+#### Recalculation Tests
+
+- [ ] `test_recalc_tech_arrives_early` - ETAs shift earlier for downstream visits
+- [ ] `test_recalc_tech_arrives_late` - ETAs shift later, violations flagged
+- [ ] `test_recalc_visit_completes_faster_than_estimated` - Time gained propagates
+- [ ] `test_recalc_visit_takes_longer_than_estimated` - Delay propagates to downstream
+- [ ] `test_recalc_visit_skipped_mid_route` - Remaining visits recalculated
+- [ ] `test_recalc_commitment_violation_flagged` - Violation created when arrival > committed end
+- [ ] `test_recalc_no_change_when_on_schedule` - ETAs unchanged if on time
+- [ ] `test_recalc_multiple_visits_completed` - Handles several done visits
+
+#### Watcher Integration Tests
+
+- [ ] `test_watcher_triggers_on_status_change_to_inprogress` - Recalc when tech arrives
+- [ ] `test_watcher_triggers_on_status_change_to_completed` - Recalc when visit done
+- [ ] `test_watcher_triggers_on_status_change_to_skipped` - Recalc when skipped
+- [ ] `test_watcher_ignores_scheduled_visits` - No recalc for scheduled visits
+- [ ] `test_watcher_ignores_visits_without_route_plan` - No recalc for unassigned
+
+#### End-to-End Day-of-Service Scenarios
+
+- [ ] `test_e2e_tech_running_late_all_day` - ETAs cascade for entire route
+- [ ] `test_e2e_tech_catches_up_after_short_visit` - Delay recovery tracked
+- [ ] `test_e2e_multiple_techs_running_concurrently` - Parallel recalculations
+- [ ] `test_e2e_mixed_status_transitions` - Complex sequence of status changes
+- [ ] `test_e2e_commitment_notification_created` - Dispatcher notified of violations
 
 ---
 

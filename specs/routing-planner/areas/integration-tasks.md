@@ -1,21 +1,30 @@
 # Integration Tasks
 
-Integration happens AFTER vrp-planner is solid with cargo tests.
+Integration with properlydone-platform-routing.
 
-## Adapter Layer (Future)
+## Adapter Layer - COMPLETE ✓
 
-- [ ] Define adapter interface for Visits/Visitors (maps ProperlyDone models to traits).
-- [ ] Define mapping rules for pins and windows.
-- [ ] Define mapping for solver outputs (sequence, estimates, unassigned reasons).
-- [ ] Provide example adapter stub.
+- [x] Define adapter interface for Visits/Visitors (maps ProperlyDone models to traits)
+- [x] Define mapping rules for pins and windows
+- [x] Define mapping for solver outputs (sequence, estimates, unassigned reasons)
+- [x] Implement `VisitAdapter`, `VisitorAdapter`, `AvailabilityAdapter`
 
-## OSRM Region Selection (Future)
+## OSRM Region Selection - COMPLETE ✓
 
-- [ ] Add `geofabrik_region` field to FieldOffice in properlydone-platform.
-- [ ] Adapter uses FieldOffice region to select OSRM dataset.
+- [x] Add `osrm_region` field to FieldOffice in properlydone-platform
+- [x] Adapter uses FieldOffice region to select OSRM dataset
+- [x] Auto-prepare OSRM data on first use via `osrm-prepare` module
+
+## Route Planner Service - COMPLETE ✓
+
+- [x] Create `services/route-planner` crate with service architecture
+- [x] Implement `RoutePlannerService` orchestration
+- [x] Implement `VisitWatcher` with LiveQuery subscription for visit changes
+- [x] Implement `recalculate_route_etas()` for day-of-service adjustments
+- [x] Handle status transitions: InProgress, Completed, Skipped, NoAccess
 
 ## Notes
 
-- vrp-planner traits are domain-agnostic.
-- properlydone-platform will implement adapters that satisfy those traits.
-- Test with mocks in vrp-planner; integrate later.
+- vrp-planner traits are domain-agnostic
+- properlydone-platform implements adapters that satisfy those traits
+- Service crate watches for visit changes and triggers recalculation automatically
