@@ -272,9 +272,12 @@ where
     let mut total_cost = 0;
     let mut result_windows = Vec::with_capacity(route.visits.len());
 
+    // Use visitor's start location, or if not set, use the first visit's location.
+    // This avoids a panic when (0.0, 0.0) isn't in the distance matrix index.
     let mut prev_location = route
         .visitor
         .start_location()
+        .or_else(|| route.visits.first().map(|v| v.location()))
         .unwrap_or((0.0, 0.0));
 
     for visit in &route.visits {
