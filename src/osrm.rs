@@ -121,7 +121,7 @@ impl OsrmClient {
             .client
             .get(&url)
             .send()
-            .map_err(|e| OsrmRouteError::RequestFailed(e.to_string()))?;
+            .map_err(|e: reqwest::Error| OsrmRouteError::RequestFailed(e.to_string()))?;
 
         if !response.status().is_success() {
             return Err(OsrmRouteError::RequestFailed(format!(
@@ -132,7 +132,7 @@ impl OsrmClient {
 
         let body: OsrmRouteResponse = response
             .json()
-            .map_err(|e| OsrmRouteError::ParseError(e.to_string()))?;
+            .map_err(|e: reqwest::Error| OsrmRouteError::ParseError(e.to_string()))?;
 
         // Check OSRM status
         if body.code != "Ok" {
@@ -196,15 +196,15 @@ impl DistanceMatrixProvider for OsrmClient {
             .client
             .get(url)
             .send()
-            .and_then(|resp| resp.error_for_status())
-            .and_then(|resp| resp.json::<OsrmTableResponse>());
+            .and_then(|resp: reqwest::blocking::Response| resp.error_for_status())
+            .and_then(|resp: reqwest::blocking::Response| resp.json::<OsrmTableResponse>());
 
         match response {
             Ok(body) => body
                 .durations
                 .unwrap_or_default()
                 .into_iter()
-                .map(|row| row.into_iter().map(|value: f64| value.round() as i32).collect())
+                .map(|row: Vec<f64>| row.into_iter().map(|value: f64| value.round() as i32).collect())
                 .collect(),
             Err(_) => Vec::new(),
         }
