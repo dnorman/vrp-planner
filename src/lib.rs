@@ -7,3 +7,4 @@ pub mod solver;
 pub mod osrm;
 pub mod osrm_data;
 pub mod haversine;
+pub mod polyline;
