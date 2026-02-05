@@ -161,9 +161,9 @@ struct StandardAvailability;
 impl AvailabilityProvider for StandardAvailability {
     type VisitorId = VisitorId;
 
-    fn availability_for(&self, _visitor_id: &Self::VisitorId, _date: i64) -> Option<(i32, i32)> {
+    fn availability_for(&self, _visitor_id: &Self::VisitorId, _date: i64) -> Option<Vec<(i32, i32)>> {
         // 8am to 5pm
-        Some((8 * 3600, 17 * 3600))
+        Some(vec![(8 * 3600, 17 * 3600)])
     }
 }
 

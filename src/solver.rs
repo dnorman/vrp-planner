@@ -2,6 +2,8 @@
 
 use std::collections::HashMap;
 
+use rayon::prelude::*;
+
 use crate::traits::{AvailabilityProvider, DistanceMatrixProvider, UnassignedReason, Visit, VisitPinType, Visitor};
 
 #[derive(Debug, Clone)]
@@ -61,9 +63,9 @@ pub fn solve<'a, V, R, A, M>(
     options: SolveOptions,
 ) -> PlannerResult<V::VisitorId, V::Id>
 where
-    V: Visit,
-    R: Visitor<Id = V::VisitorId>,
-    A: AvailabilityProvider<VisitorId = V::VisitorId>,
+    V: Visit + Sync,
+    R: Visitor<Id = V::VisitorId> + Sync,
+    A: AvailabilityProvider<VisitorId = V::VisitorId> + Sync,
     M: DistanceMatrixProvider,
 {
     let mut to_assign: Vec<&V> = Vec::new();
@@ -93,8 +95,10 @@ where
     }
 
     let locations = collect_locations(visits, visitors);
-    let index = location_index(&locations);
     let matrix = matrix_provider.matrix_for(&locations);
+
+    // Build efficient coordinate-to-index mapping (avoids string allocation per lookup)
+    let coord_index = build_coord_index(&locations);
 
     let mut routes: Vec<RouteState<'a, V, R>> = Vec::new();
     for visitor in visitors {
@@ -111,7 +115,7 @@ where
         };
 
         if !route.visits.is_empty() {
-            if let Some(schedule) = compute_schedule(service_date, &route, availability, &matrix, &index, &options) {
+            if let Some(schedule) = compute_schedule(service_date, &route, availability, &matrix, &coord_index, &options) {
                 route.estimated_windows = schedule.0;
                 route.total_travel_time = schedule.1;
             } else {
@@ -130,53 +134,63 @@ where
             continue;
         }
 
-        let mut best_route: Option<usize> = None;
-        let mut best_position: usize = 0;
-        let mut best_cost: i32 = i32::MAX;
-        let mut best_schedule: Option<(Vec<(i32, i32)>, i32)> = None;
-        let mut found_capable_available_visitor = false;
+        // Evaluate all routes in parallel using rayon
+        let route_evaluations: Vec<(usize, Option<usize>, i32, Option<(Vec<(i32, i32)>, i32)>, bool)> =
+            routes.par_iter().enumerate()
+            .filter_map(|(route_index, route)| {
+                // Skip visitors who don't have required capabilities
+                if !visitor_can_do(visit, route.visitor) {
+                    return None;
+                }
 
-        for (route_index, route) in routes.iter().enumerate() {
-            // Skip visitors who don't have required capabilities
-            if !visitor_can_do(visit, route.visitor) {
-                continue;
-            }
+                // Check if this capable visitor is available
+                let is_available = availability.availability_for(route.visitor.id(), service_date).is_some();
 
-            // Check if this capable visitor is available
-            if availability.availability_for(route.visitor.id(), service_date).is_some() {
-                found_capable_available_visitor = true;
-            }
+                // Find best position for this route
+                let mut best_pos: Option<usize> = None;
+                let mut best_cost = i32::MAX;
+                let mut best_schedule: Option<(Vec<(i32, i32)>, i32)> = None;
 
-            for position in 0..=route.visits.len() {
-                let mut candidate = route.visits.clone();
-                candidate.insert(position, visit);
+                for position in 0..=route.visits.len() {
+                    let mut candidate = route.visits.clone();
+                    candidate.insert(position, visit);
 
-                let candidate_route = RouteState {
-                    visitor: route.visitor,
-                    visits: candidate,
-                    estimated_windows: Vec::new(),
-                    total_travel_time: 0,
-                };
+                    let candidate_route = RouteState {
+                        visitor: route.visitor,
+                        visits: candidate,
+                        estimated_windows: Vec::new(),
+                        total_travel_time: 0,
+                    };
 
-                if let Some(schedule) = compute_schedule(
-                    service_date,
-                    &candidate_route,
-                    availability,
-                    &matrix,
-                    &index,
-                    &options,
-                ) {
-                    if schedule.1 < best_cost {
-                        best_cost = schedule.1;
-                        best_route = Some(route_index);
-                        best_position = position;
-                        best_schedule = Some(schedule);
+                    if let Some(schedule) = compute_schedule(
+                        service_date,
+                        &candidate_route,
+                        availability,
+                        &matrix,
+                        &coord_index,
+                        &options,
+                    ) {
+                        if schedule.1 < best_cost {
+                            best_cost = schedule.1;
+                            best_pos = Some(position);
+                            best_schedule = Some(schedule);
+                        }
                     }
                 }
-            }
-        }
 
-        if let Some(route_index) = best_route {
+                Some((route_index, best_pos, best_cost, best_schedule, is_available))
+            })
+            .collect();
+
+        // Check if any capable visitor is available
+        let found_capable_available_visitor = route_evaluations.iter().any(|(_ri, _bp, _c, _s, is_available)| *is_available);
+
+        // Find overall best from parallel results
+        let best = route_evaluations.into_iter()
+            .filter(|(_ri, best_pos, _c, _s, _a)| best_pos.is_some())
+            .min_by_key(|(_ri, _bp, cost, _s, _a)| *cost);
+
+        if let Some((route_index, Some(best_position), _, best_schedule, _)) = best {
             let route = &mut routes[route_index];
             route.visits.insert(best_position, visit);
             if let Some((windows, cost)) = best_schedule {
@@ -200,7 +214,7 @@ where
         service_date,
         availability,
         &matrix,
-        &index,
+        &coord_index,
         &options,
     );
 
@@ -253,7 +267,7 @@ fn compute_schedule<V, R, A>(
     route: &RouteState<'_, V, R>,
     availability: &A,
     matrix: &[Vec<i32>],
-    index: &HashMap<String, usize>,
+    coord_index: &HashMap<(i64, i64), usize>,
     options: &SolveOptions,
 ) -> Option<(Vec<(i32, i32)>, i32)>
 where
@@ -281,7 +295,7 @@ where
         .unwrap_or((0.0, 0.0));
 
     for visit in &route.visits {
-        let travel = travel_time(prev_location, visit.location(), matrix, index);
+        let travel = travel_time_fast(prev_location, visit.location(), matrix, coord_index);
         time += travel;
         total_cost += travel;
 
@@ -372,17 +386,6 @@ fn find_fitting_window(
     None
 }
 
-fn travel_time(
-    from: (f64, f64),
-    to: (f64, f64),
-    matrix: &[Vec<i32>],
-    index: &HashMap<String, usize>,
-) -> i32 {
-    let from_idx = index[&location_key(from)];
-    let to_idx = index[&location_key(to)];
-    matrix[from_idx][to_idx]
-}
-
 fn collect_locations<V, R>(visits: &[V], visitors: &[R]) -> Vec<(f64, f64)>
 where
     V: Visit,
@@ -405,10 +408,10 @@ where
 }
 
 fn dedupe_locations(locations: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
-    let mut seen: HashMap<String, usize> = HashMap::new();
+    let mut seen: HashMap<(i64, i64), usize> = HashMap::new();
     let mut unique = Vec::new();
     for location in locations {
-        let key = location_key(location);
+        let key = coord_to_int_key(location);
         if seen.contains_key(&key) {
             continue;
         }
@@ -418,16 +421,37 @@ fn dedupe_locations(locations: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
     unique
 }
 
-fn location_key(location: (f64, f64)) -> String {
-    format!("{:.6},{:.6}", location.0, location.1)
+/// Convert floating-point coordinates to integer-scaled coordinates for efficient hashing.
+/// Scales by 1,000,000 to preserve 6 decimal places of precision.
+/// Uses round() to match the formatting behavior of location_key which uses {:.6}.
+#[inline]
+fn coord_to_int_key(coord: (f64, f64)) -> (i64, i64) {
+    ((coord.0 * 1_000_000.0).round() as i64, (coord.1 * 1_000_000.0).round() as i64)
 }
 
-fn location_index(locations: &[(f64, f64)]) -> HashMap<String, usize> {
-    let mut index = HashMap::new();
-    for (i, location) in locations.iter().enumerate() {
-        index.insert(location_key(*location), i);
-    }
-    index
+/// Build an efficient coordinate-to-index mapping using integer-scaled coordinates.
+/// This avoids string allocation on every lookup.
+/// Takes the original locations to ensure consistent float->int conversion.
+fn build_coord_index(locations: &[(f64, f64)]) -> HashMap<(i64, i64), usize> {
+    locations.iter()
+        .enumerate()
+        .map(|(idx, &coord)| (coord_to_int_key(coord), idx))
+        .collect()
+}
+
+/// Fast travel time lookup using integer-scaled coordinates (no string allocation).
+#[inline]
+fn travel_time_fast(
+    from: (f64, f64),
+    to: (f64, f64),
+    matrix: &[Vec<i32>],
+    coord_index: &HashMap<(i64, i64), usize>,
+) -> i32 {
+    let from_key = coord_to_int_key(from);
+    let to_key = coord_to_int_key(to);
+    let from_idx = coord_index[&from_key];
+    let to_idx = coord_index[&to_key];
+    matrix[from_idx][to_idx]
 }
 
 // ============================================================================
@@ -441,7 +465,7 @@ fn two_opt_improve<'a, V, R, A>(
     service_date: i64,
     availability: &A,
     matrix: &[Vec<i32>],
-    index: &HashMap<String, usize>,
+    coord_index: &HashMap<(i64, i64), usize>,
     options: &SolveOptions,
 ) -> bool
 where
@@ -474,7 +498,7 @@ where
                 &candidate_route,
                 availability,
                 matrix,
-                index,
+                coord_index,
                 options,
             ) {
                 if cost < current_cost {
@@ -497,7 +521,7 @@ fn relocate_improve<'a, V, R, A>(
     service_date: i64,
     availability: &A,
     matrix: &[Vec<i32>],
-    index: &HashMap<String, usize>,
+    coord_index: &HashMap<(i64, i64), usize>,
     options: &SolveOptions,
 ) -> bool
 where
@@ -588,7 +612,7 @@ where
                         &from_route_state,
                         availability,
                         matrix,
-                        index,
+                        coord_index,
                         options,
                     );
 
@@ -627,7 +651,7 @@ where
                             &to_route_state,
                             availability,
                             matrix,
-                            index,
+                            coord_index,
                             options,
                         );
 
@@ -671,7 +695,7 @@ fn local_search<'a, V, R, A>(
     service_date: i64,
     availability: &A,
     matrix: &[Vec<i32>],
-    index: &HashMap<String, usize>,
+    coord_index: &HashMap<(i64, i64), usize>,
     options: &SolveOptions,
 )
 where
@@ -689,7 +713,7 @@ where
                 service_date,
                 availability,
                 matrix,
-                index,
+                coord_index,
                 options,
             ) {
                 improved = true;
@@ -702,7 +726,7 @@ where
             service_date,
             availability,
             matrix,
-            index,
+            coord_index,
             options,
         ) {
             improved = true;

@@ -238,11 +238,11 @@ impl TestAvailability {
 impl AvailabilityProvider for TestAvailability {
     type VisitorId = TestId;
 
-    fn availability_for(&self, visitor_id: &Self::VisitorId, _date: i64) -> Option<(i32, i32)> {
+    fn availability_for(&self, visitor_id: &Self::VisitorId, _date: i64) -> Option<Vec<(i32, i32)>> {
         if let Some(override_window) = self.overrides.get(&visitor_id.0) {
-            *override_window
+            override_window.map(|w| vec![w])
         } else {
-            Some(self.default_window)
+            Some(vec![self.default_window])
         }
     }
 }

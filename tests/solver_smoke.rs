@@ -90,8 +90,8 @@ struct MockAvailability;
 impl AvailabilityProvider for MockAvailability {
     type VisitorId = Id;
 
-    fn availability_for(&self, _visitor_id: &Self::VisitorId, _date: i64) -> Option<(i32, i32)> {
-        Some((0, 8 * 3600))
+    fn availability_for(&self, _visitor_id: &Self::VisitorId, _date: i64) -> Option<Vec<(i32, i32)>> {
+        Some(vec![(0, 8 * 3600)])
     }
 }
 
