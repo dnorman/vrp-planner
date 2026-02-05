@@ -204,7 +204,7 @@ impl DistanceMatrixProvider for OsrmClient {
                 .durations
                 .unwrap_or_default()
                 .into_iter()
-                .map(|row| row.into_iter().map(|value| value.round() as i32).collect())
+                .map(|row| row.into_iter().map(|value: f64| value.round() as i32).collect())
                 .collect(),
             Err(_) => Vec::new(),
         }
