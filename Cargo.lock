@@ -2370,6 +2370,7 @@ dependencies = [
  "reqwest",
  "serde",
  "testcontainers",
+ "tracing",
 ]
 
 [[package]]

@@ -1,8 +1,10 @@
 //! Routing planner solver (baseline implementation).
 
 use std::collections::HashMap;
+use std::time::Instant;
 
 use rayon::prelude::*;
+use tracing::{debug, info};
 
 use crate::traits::{AvailabilityProvider, DistanceMatrixProvider, UnassignedReason, Visit, VisitPinType, Visitor};
 
@@ -68,6 +70,9 @@ where
     A: AvailabilityProvider<VisitorId = V::VisitorId> + Sync,
     M: DistanceMatrixProvider,
 {
+    let solve_start = Instant::now();
+    info!(visits = visits.len(), visitors = visitors.len(), "Starting VRP solve");
+
     let mut to_assign: Vec<&V> = Vec::new();
     let mut unassigned_with_reason: Vec<(&V, UnassignedReason)> = Vec::new();
     let mut pinned_assignments: HashMap<&V::VisitorId, Vec<&V>> = HashMap::new();
@@ -95,10 +100,17 @@ where
     }
 
     let locations = collect_locations(visits, visitors);
+
+    let matrix_start = Instant::now();
     let matrix = matrix_provider.matrix_for(&locations);
+    let matrix_duration = matrix_start.elapsed();
+    info!(locations = locations.len(), duration_ms = matrix_duration.as_millis(), "Distance matrix computed");
 
     // Build efficient coordinate-to-index mapping (avoids string allocation per lookup)
     let coord_index = build_coord_index(&locations);
+
+    // Assignment phase - initial route building
+    let assignment_start = Instant::now();
 
     let mut routes: Vec<RouteState<'a, V, R>> = Vec::new();
     for visitor in visitors {
@@ -208,7 +220,17 @@ where
         }
     }
 
+    let assignment_duration = assignment_start.elapsed();
+    let assigned_so_far = routes.iter().map(|r| r.visits.len()).sum::<usize>();
+    info!(
+        duration_ms = assignment_duration.as_millis(),
+        assigned = assigned_so_far,
+        unassigned = unassigned_with_reason.len(),
+        "Assignment phase complete"
+    );
+
     // Local search improvement phase
+    let local_search_start = Instant::now();
     local_search(
         &mut routes,
         service_date,
@@ -217,8 +239,10 @@ where
         &coord_index,
         &options,
     );
+    let local_search_duration = local_search_start.elapsed();
+    info!(duration_ms = local_search_duration.as_millis(), "Local search complete");
 
-    let routes = routes
+    let routes: Vec<RouteResult<V::VisitorId, V::Id>> = routes
         .into_iter()
         .map(|route| RouteResult {
             visitor_id: route.visitor.id().clone(),
@@ -228,13 +252,27 @@ where
         })
         .collect();
 
-    let unassigned = unassigned_with_reason
+    let unassigned: Vec<UnassignedVisit<V::Id>> = unassigned_with_reason
         .into_iter()
         .map(|(visit, reason)| UnassignedVisit {
             visit_id: visit.id().clone(),
             reason,
         })
         .collect();
+
+    let total_duration = solve_start.elapsed();
+    let assigned_count = routes.iter().map(|r| r.visit_ids.len()).sum::<usize>();
+    let unassigned_count = unassigned.len();
+    info!(
+        total_ms = total_duration.as_millis(),
+        matrix_ms = matrix_duration.as_millis(),
+        assignment_ms = assignment_duration.as_millis(),
+        local_search_ms = local_search_duration.as_millis(),
+        routes = routes.len(),
+        assigned = assigned_count,
+        unassigned = unassigned_count,
+        "VRP solve complete"
+    );
 
     PlannerResult { routes, unassigned }
 }
@@ -703,7 +741,8 @@ where
     R: Visitor<Id = V::VisitorId>,
     A: AvailabilityProvider<VisitorId = V::VisitorId>,
 {
-    for _ in 0..options.local_search_iterations {
+    let mut iterations_completed = 0;
+    for iteration in 0..options.local_search_iterations {
         let mut improved = false;
 
         // Try 2-opt on each route
@@ -732,8 +771,14 @@ where
             improved = true;
         }
 
+        iterations_completed = iteration + 1;
         if !improved {
             break;
         }
     }
+    debug!(
+        iterations = iterations_completed,
+        max_iterations = options.local_search_iterations,
+        "Local search iterations"
+    );
 }
